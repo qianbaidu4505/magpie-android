@@ -100,36 +100,67 @@ BODY="Magpie 的 Android 壳（非官方移植）。
 
 ## 本次更新
 
-### 修复：AI 智能体卡在「正在思考」
+### 修复：通知栏一直「正在启动网关」
 
-小米 / 澎湃OS 的省电策略（greeze）会在 App 退到后台约 40 秒后冻结整个进程组：网关端口还在监听、前台服务通知也还在，但用户态代码一行都不执行，AI 请求就卡在那里，直到你手动点开 App 才恢复。
+系统重投递服务时，通知会被刷回启动文案却不再纠正。现在通知始终与网关真实状态对齐。
 
-这一版加了提醒：
+### 修复：检查 App 更新失败
 
-- **打开 App 时**：如果是小米系且还没把 Magpie 设成「无限制」，会发一条通知，点它直达系统设置页。
-- **从后台回来时**：如果这次在后台待了 40 秒以上（超过 greeze 的下手时间），补一条通知，告诉你刚才很可能是被系统冻住了。
-- 两类提醒都是 7 天最多一次，不刷屏、不弹框。
+GitHub API 匿名访问返回 403 后，自动回退到 releases.atom 继续查，不再报「GitHub 返回 403」；同时不再内置任何 token。
 
-设置页的后台保活引导也把这层因果关系写清了，不再只说「减少熄屏后冻结的概率」。
+### 修复：供应商余额进度条
 
-### 新增：上下文地图
+进度条改为按「聚合后的总额度已用」画，不再因为某个账号用光而整条标红。
 
-上下文窗口里补上了网页那张矩形分区图：各类 Token 按面积占比铺开，块内再分具体条目，右侧是带斜纹的「剩余空间」。点有内容的块可以直接看那一项的原文。
+### 菜单精简
 
-### 修正：额度写「剩余」，条画「已用」
+移除「停止网关」和「重新加载网页」两个残留项。
 
-- 账号页与概览页的额度窗口，数字从「已用 / 总额度」改成「剩余 / 总额度」。
-- 下面的进度条改成已用进度（越满越危险），颜色仍按剩余判定。
-- 账号展开后，在窗口列表上方多一行「余额 / 总额度」。
+### 新增：文件管理器
 
-### 其他
+⋮ → 插件 → 文件管理器。
 
-- 路由页的请求记录改为最新在上（按天记录原来是从最早一条开始列）。
-- 上下文窗口的会话轮次改为最新一轮在上。
-- 通知栏点进去是原生界面，不再直接落 magpie 网页。
-- 关于页补上本外壳源码仓库与作者信息，链接可点。
-- 修复：带名字的 API Key（比如天枢那几个）点了「停用」后再也点不回去，一直提示「这个账号没在供应商列表里找到」。
-- 修复：从没打开过网页的供应商页时，?last=1 是空的，导致所有 Key 型供应商都启停不了。现在会自动拉一次全量。
+- 浏览 magpie 私有 HOME 目录（filesDir/home）。
+- 从手机导入文件到任意子目录、新建文件夹、删除、重命名。
+- 长按/点文件可复制**壳内绝对路径**，方便给插件填路径。
+- 不经过 WebView 文件选择器，手机导入文件不再点不开。
+
+### 账号页：模型工具
+
+- 「添加供应商」入口换成两个按钮：
+  - **刷新模型**：手动向各家供应商重新拉一次模型表。
+  - **全部模型**：弹出面板，按供应商列出当前全部模型。
+- 每个模型显示：显示名、倍率、能力胶囊（免费 / 视觉 / 推理 / 生图 / 生视频）、模型 id。
+- **长按模型行复制完整引用**（供应商id/模型id），配合路由组的「模式」匹配用。
+
+### 局域网开关与 magpie 同步
+
+壳里的「允许局域网访问」现在会同步写 magpie 自己的「局域网共享」，不用再两边各点一次；反过来在网页里改，回到设置页也会同步回壳。
+
+### 通知栏地址修正
+
+开启局域网后，通知栏的网关地址不再显示 0.0.0.0，固定显示本机 127.0.0.1。
+
+### 菜单：复制网页登录链接
+
+⋮ → 其他 → 复制网页登录链接，粘到浏览器直接登进 magpie 后台，不再卡在「magpie web」登录页。
+
+### 冻结提醒（1.4.3 已有，继续生效）
+
+小米 / 澎湃OS 的省电策略会在 App 退后台约 40 秒后冻结整个进程组，导致 AI 智能体卡在「正在思考」。
+
+- 打开 App 时：如果是小米系且没设「无限制」，发通知引导直达设置。
+- 后台回来时：超过 40 秒补一条「刚才可能被冻结」的提醒。
+- 7 天最多一次。
+
+### 之前版本已含
+
+- 上下文地图（矩形分区图）。
+- 额度写「剩余 / 总额度」，进度条画「已用」。
+- 请求记录最新在上、会话轮次最新在上。
+- 通知栏点进原生界面。
+- 关于页补壳仓库与作者链接。
+- 天枢等带名字的 Key 启停修复。
 
 ## 安装
 下载本 Release 的 APK 直接安装。升级须用同一签名的 APK 覆盖安装；不要先卸载，否则本地配置、账号和数据会被清除。
@@ -143,7 +174,7 @@ echo "==> 创建 Release"
 # JSON 必须先落文件再用 @ 传给 curl。
 # 直接 -d "$JSON" 会让 shell/echo 层吃掉反斜杠转义，GitHub 回 400 Problems parsing JSON。
 REL_JSON_FILE="$(mktemp)"
-trap 'rm -f "$REL_JSON_FILE"' EXIT
+trap 'rm -f "$REL_JSON_FILE" "$REL_JSON_FILE.out"' EXIT
 python3 - "$REL_JSON_FILE" "$TAG" "$VERSION_NAME" "$BODY" <<'PY'
 import json, sys
 path, tag, ver, body = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
@@ -153,39 +184,54 @@ with open(path, 'w', encoding='utf-8') as f:
               f, ensure_ascii=False)
 PY
 
-curl -sS -X POST \
-    -H "Authorization: token $TOKEN" \
-    -H "Accept: application/vnd.github+json" \
-    -H "Content-Type: application/json" \
-    "https://api.github.com/repos/$OWNER/$REPO/releases" \
-    -d @"$REL_JSON_FILE" \
-    -o "$REL_JSON_FILE.out" -w '%{http_code}' > "$REL_JSON_FILE.code"
-
-RELEASE_ID="$(python3 -c '
-import json,sys
-p=sys.argv[1]
+# 用 Python 直接发请求并解析，不再依赖 curl -w 重定向出的 .code 文件
+# （那个临时文件在 curl 失败时会缺失，导致解析脚本 Traceback）。
+RELEASE_ID="$(python3 - "$REL_JSON_FILE" "$TOKEN" "$OWNER" "$REPO" <<'PY'
+import json, sys, urllib.request, urllib.error
+path, token, owner, repo = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+payload = open(path, 'rb').read()
+req = urllib.request.Request(
+    f"https://api.github.com/repos/{owner}/{repo}/releases",
+    data=payload, method="POST",
+    headers={"Authorization": "token " + token,
+             "Accept": "application/vnd.github+json",
+             "Content-Type": "application/json"})
 try:
-    d=json.load(open(p))
-except Exception as e:
-    print(""); print("    解析回包失败:", e, file=sys.stderr); sys.exit(0)
-if d.get("id") is None:
-    print("", file=sys.stdout)
-    print("    HTTP %s: %s" % (open(p+".code").read().strip(), d.get("message")), file=sys.stderr)
-else:
-    print(d["id"])
-' "$REL_JSON_FILE.out")"
-rm -f "$REL_JSON_FILE.out" "$REL_JSON_FILE.code"
+    d = json.load(urllib.request.urlopen(req))
+except urllib.error.HTTPError as e:
+    sys.stderr.write("创建 Release HTTP %s: %s\n" % (e.code, e.read().decode()[:300]))
+    print("")
+    sys.exit(0)
+print(d.get("id", ""))
+PY
+)"
 
 [ -n "$RELEASE_ID" ] || { echo "创建 Release 失败" >&2; exit 1; }
 echo "    release id = $RELEASE_ID"
 
-echo "==> 上传 APK（约 69MB，耐心等）"
-curl -sS -X POST \
-    -H "Authorization: token $TOKEN" \
-    -H "Content-Type: application/vnd.android.package-archive" \
-    --data-binary "@$APK" \
-    "https://uploads.github.com/repos/$OWNER/$REPO/releases/$RELEASE_ID/assets?name=$(basename "$APK")" \
-    | python3 -c 'import json,sys; d=json.load(sys.stdin); print("    asset:", d.get("name"), d.get("size",""), "bytes"); print("    error:", d.get("message"))'
+echo "==> 上传 APK（约 75MB，耐心等）"
+ASSET_NAME="$(basename "$APK")"
+python3 - "$TOKEN" "$OWNER" "$REPO" "$RELEASE_ID" "$APK" "$ASSET_NAME" <<'PY'
+import json, sys, http.client
+
+_, token, owner, repo, rid, apk, name = sys.argv
+data = open(apk, 'rb').read()
+conn = http.client.HTTPSConnection("uploads.github.com", timeout=1800)
+conn.request(
+    "POST",
+    f"/repos/{owner}/{repo}/releases/{rid}/assets?name={name}",
+    body=data,
+    headers={"Authorization": "token " + token,
+             "Content-Type": "application/vnd.android.package-archive",
+             "Content-Length": str(len(data))})
+resp = conn.getresponse()
+out = resp.read().decode()
+d = json.loads(out) if out.strip().startswith('{') else {}
+print("    HTTP %s" % resp.status)
+print("    asset: %s %s bytes" % (d.get("name"), d.get("size", "")))
+if d.get("message"):
+    print("    error: %s" % d.get("message"))
+PY
 
 echo
 echo "完成："
