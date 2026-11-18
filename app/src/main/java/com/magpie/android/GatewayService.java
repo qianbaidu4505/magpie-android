@@ -1022,17 +1022,16 @@ public class GatewayService extends Service {
     /**
      * 把前台通知与网关真实状态对齐。
      *
-     * <p>startForeground 每次都会把文案重置成「正在启动网关…」，而
-     * notifyReady 只在启动后的 120 秒探测窗口里出现一次；之后每次打开 App、
-     * 每次系统重投递服务 Intent，通知都会退回启动文案，用户就会看到
-     * 「App 显示运行中、通知显示正在启动」的矛盾。这里在状态真的变化时
-     * 把通知刷回运行/停止。
+     * <p>为什么这里每次都直接发、不做「状态没变就跳过」的去重：
+     * startForeground 每次都会把文案重置成「正在启动网关…」，而
+     * lastNotifAlive 只是「最后一次 sync 的目标状态」，不是通知栏里
+     * 实际显示的内容。系统重投递服务 Intent 时，通知被 startForeground
+     * 刷回启动文案，但 lastNotifAlive 还停留在「运行中」——再调
+     * syncNotification(true) 会因为「状态没变」直接 return，于是通知
+     * 就一直停在「正在启动网关…」。同 NOTIF_ID 重复发只会覆盖，没有副作用，
+     * 所以这里一律直接发。
      */
     static void syncNotification(Context ctx, boolean alive) {
-        Boolean last = lastNotifAlive;
-        if (last != null && last == alive) {
-            return;
-        }
         lastNotifAlive = alive;
         if (alive) {
             NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
@@ -1042,7 +1041,6 @@ public class GatewayService extends Service {
                                 + (Prefs.lan(ctx) ? " · 局域网共享已开" : ""), FOREGROUND_FLAGS));
             }
         } else {
-            lastNotifAlive = false;
             NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm != null) {
                 nm.notify(NOTIF_ID, notification(ctx, "Magpie 正在确认网关状态",

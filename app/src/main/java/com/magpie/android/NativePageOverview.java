@@ -610,11 +610,11 @@ final class NativePageOverview extends NativePage {
         total.setLayoutParams(ui.matchWrap(3));
         titleBox.addView(total);
 
-        // 合计后面挂一条进度条：条走已用，颜色按最紧的剩余判定
-        double tight = QuotaAgg.tightest(list);
+        // 合计后面挂一条进度条：条走「这家总已用」，颜色按「总剩余」判定
+        double usedPct = QuotaAgg.headlineUsed(list);
         card.addView(head);
-        if (tight >= 0 && list.size() > 0) {
-            card.addView(ui.quotaBar(100 - tight, tight));
+        if (usedPct >= 0) {
+            card.addView(ui.quotaBar(usedPct, 100 - usedPct));
         }
 
         // 二级：每个账号一行，缩进

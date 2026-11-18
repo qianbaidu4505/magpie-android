@@ -21,9 +21,9 @@ import java.nio.charset.StandardCharsets;
  * 走 {@link Updater}；壳是安装的这个 APK，走这里。只做「提示 + 跳到 Release 页」，
  * 下载安装交给系统浏览器和安装器，壳不碰 APK 文件、不请求安装权限。
  *
- * <p>源是 GitHub Releases API 的 {@code /releases/latest}，公开仓库匿名可读
- * （未认证限流 60 次/小时，检查更新这点频率够用）。仓库地址在下面两个常量里，
- * 开源发布后填成真实的 owner/repo 再出包。
+ * <p>检查源有两级：先问 GitHub Releases API（结构好解析）；API 对未认证请求
+ * 返回 403（2026-11 起 GitHub 收紧了匿名访问）时，回退到 {@code releases.atom}
+ * —— 那是普通网页端点，匿名可读、不限流。两条都不带 token，避免把凭据写进 APK。
  */
 public final class ShellUpdater {
 
@@ -113,46 +113,112 @@ public final class ShellUpdater {
     }
 
     private static Result fetch() throws IOException {
+        Result r = fetchApi();
+        if (r == null) {
+            r = fetchAtom();
+        }
+        if (r == null) {
+            return new Result("", "", "", "GitHub 不可达（API 与 atom 都没读到）");
+        }
+        return r;
+    }
+
+    /**
+     * 第一级：GitHub Releases API。匿名访问可能 403，失败返回 null 交给
+     * atom 兜底，不在这里报错。
+     */
+    private static Result fetchApi() {
         String url = "https://api.github.com/repos/" + OWNER + "/" + REPO + "/releases/latest";
-        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
-        c.setRequestProperty("Accept", "application/vnd.github+json");
-        c.setRequestProperty("User-Agent", "magpie-android-shell");
-        c.setConnectTimeout(10_000);
-        c.setReadTimeout(10_000);
+        HttpURLConnection c = null;
         try {
+            c = (HttpURLConnection) new URL(url).openConnection();
+            c.setRequestProperty("Accept", "application/vnd.github+json");
+            c.setRequestProperty("User-Agent", "magpie-android-shell");
+            c.setConnectTimeout(10_000);
+            c.setReadTimeout(10_000);
             int code = c.getResponseCode();
             if (code == 404) {
                 return new Result("", "", "", "仓库还没有 Release");
             }
             if (code != 200) {
-                return new Result("", "", "", "GitHub 返回 " + code);
+                return null; // 403 等，交给 atom
             }
             String body = readAll(c.getInputStream());
-            try {
-                JSONObject j = new JSONObject(body);
-                String tag = j.optString("tag_name", "");
-                String page = j.optString("html_url", releasesPage());
-                String dl = "";
-                JSONArray assets = j.optJSONArray("assets");
-                if (assets != null) {
-                    for (int i = 0; i < assets.length(); i++) {
-                        JSONObject a = assets.optJSONObject(i);
-                        if (a == null) {
-                            continue;
-                        }
-                        String name = a.optString("name", "");
-                        if (name.toLowerCase().endsWith(".apk")) {
-                            dl = a.optString("browser_download_url", "");
-                            break;
-                        }
+            JSONObject j = new JSONObject(body);
+            String tag = j.optString("tag_name", "");
+            String page = j.optString("html_url", releasesPage());
+            String dl = "";
+            JSONArray assets = j.optJSONArray("assets");
+            if (assets != null) {
+                for (int i = 0; i < assets.length(); i++) {
+                    JSONObject a = assets.optJSONObject(i);
+                    if (a == null) {
+                        continue;
+                    }
+                    String name = a.optString("name", "");
+                    if (name.toLowerCase().endsWith(".apk")) {
+                        dl = a.optString("browser_download_url", "");
+                        break;
                     }
                 }
-                return new Result(stripV(tag), page, dl, null);
-            } catch (org.json.JSONException e) {
-                throw new IOException("GitHub 响应不是 JSON：" + e.getMessage());
             }
+            return new Result(stripV(tag), page, dl, null);
+        } catch (Exception e) {
+            return null;
         } finally {
-            c.disconnect();
+            if (c != null) {
+                c.disconnect();
+            }
+        }
+    }
+
+    /**
+     * 第二级：从 releases.atom 读最新 tag。
+     *
+     * <p>atom 是普通网页端点，匿名可读。里面没有 APK 直链，但下载直链是
+     * 固定格式：{@code https://github.com/<owner>/<repo>/releases/download/<tag>/<repo>-<ver>.apk}
+     * （发布脚本传的 asset 名就是 {@code magpie-android-<version>.apk}）。
+     * 按 tag 拼出来；万一拼错下载会 404，但不影响「检查」本身。
+     */
+    private static Result fetchAtom() {
+        String url = "https://github.com/" + OWNER + "/" + REPO + "/releases.atom";
+        HttpURLConnection c = null;
+        try {
+            c = (HttpURLConnection) new URL(url).openConnection();
+            c.setRequestProperty("User-Agent", "magpie-android-shell");
+            c.setConnectTimeout(10_000);
+            c.setReadTimeout(10_000);
+            int code = c.getResponseCode();
+            if (code != 200) {
+                return null;
+            }
+            String body = readAll(c.getInputStream());
+            String marker = "Repository/";
+            int i = body.indexOf(marker);
+            if (i < 0) {
+                return null;
+            }
+            int start = i + marker.length();
+            int end = body.indexOf('<', start);
+            if (end < 0) {
+                return null;
+            }
+            String tag = body.substring(start, end).trim();
+            if (!tag.startsWith("v")) {
+                return null;
+            }
+            String ver = stripV(tag);
+            String page = "https://github.com/" + OWNER + "/" + REPO
+                    + "/releases/tag/" + tag;
+            String dl = "https://github.com/" + OWNER + "/" + REPO
+                    + "/releases/download/" + tag + "/" + REPO + "-" + ver + ".apk";
+            return new Result(ver, page, dl, null);
+        } catch (Exception e) {
+            return null;
+        } finally {
+            if (c != null) {
+                c.disconnect();
+            }
         }
     }
 

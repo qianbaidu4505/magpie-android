@@ -286,6 +286,29 @@ final class QuotaAgg {
     }
 
     /**
+     * 这家聚合后的总额度，已用占比（0..100）。
+     *
+     * <p>进度条要的是「总额度用了多少」，不是「单个账号剩多少」。WorkBuddy
+     * 两个账号各自 500/500 和 3031/6142，聚合后是 3031/6142（约 49% 已用），
+     * 进度条就该画 49%，而不是拿某个用光的账号画成 100% 全红。
+     *
+     * @return 已用百分比；没有可聚合的额度窗口时返回 -1
+     */
+    static double headlineUsed(List<JSONObject> accounts) {
+        Window h = headline(windows(accounts));
+        if (h == null || h.limit <= 0) {
+            return -1;
+        }
+        return Math.max(0, Math.min(100, h.amount * 100.0 / h.limit));
+    }
+
+    /** 聚合后的总额度，剩余占比（0..100）；没有时返回 -1。 */
+    static double headlineLeft(List<JSONObject> accounts) {
+        double used = headlineUsed(accounts);
+        return used < 0 ? -1 : 100 - used;
+    }
+
+    /**
      * 供应商那一行的一句话汇总。
      *
      * <p>顺序：余额 → 额度窗口总量 → 最紧的那个百分比 → 读不到。

@@ -708,14 +708,14 @@ public class NativeHome extends Activity {
         final String[] groups = {"控制台", "网关", "插件", "更新", "其他"};
         final String[][] titles = {
                 {"打开控制后台"},
-                {"重启网关", "停止网关", "查看日志", "复制网关地址", "忽略电池优化"},
+                {"重启网关", "查看日志", "复制网关地址", "忽略电池优化"},
                 {"导入本地插件", "粘贴 Marvis 登录回调", "文件管理器"},
                 {"检查 magpie 更新", "检查 App 更新"},
-                {"复制网页登录链接", "用浏览器打开", "设置", "重新加载网页", "关于"},
+                {"复制网页登录链接", "用浏览器打开", "设置", "关于"},
         };
         final String[][] subs = {
                 {"magpie 自己的完整网页界面：插件、脱敏、同步备份都在这里"},
-                {"先停再起，改过密钥或配置后用得上", "agent 连不上，直到再启动为止",
+                {"先停再起，改过密钥或配置后用得上",
                         "网关最后写下的三百行输出", "把 …:3425/v1 复制到剪贴板",
                         "让系统不要在熄屏后冻结网关"},
                 {"从手机存储选文件夹，拷进沙箱并交给 magpie",
@@ -724,15 +724,15 @@ public class NativeHome extends Activity {
                 {"拉 GitHub 上的新版二进制，不用重装 APK", "下载新版 APK 并调系统安装器"},
                 {"带 k= 的完整网页地址，粘到浏览器里直接登进去（绕过登录页）",
                         "交给系统浏览器，方便用电脑上的工具看",
-                        "端口、局域网访问、外观与开机启动", "页面重新读一遍，不重启网关",
+                        "端口、局域网访问、外观与开机启动",
                         "官方仓库、移植作者与许可证"},
         };
         final String[][] icons = {
                 {"\u2699"},
-                {"\u27f3", "\u25a0", "\u25a4", "\u29c9", "\u26a1"},
+                {"\u27f3", "\u25a4", "\u29c9", "\u26a1"},
                 {"\u2913", "\u270e", "\u25a4"},
                 {"\u21e9", "\u2b07"},
-                {"\u29c9", "\u2197", "\u2699", "\u21bb", "\u24d8"},
+                {"\u29c9", "\u2197", "\u2699", "\u24d8"},
         };
 
         final Dialog dialog = new Dialog(this, R.style.Theme_Magpie_Sheet);
@@ -856,15 +856,9 @@ public class NativeHome extends Activity {
                         pollGateway();
                         break;
                     case 1:
-                        GatewayService.stop(this);
-                        gatewayReady = false;
-                        refreshHeader();
-                        toast("网关已停止");
-                        break;
-                    case 2:
                         showLog();
                         break;
-                    case 3:
+                    case 2:
                         copyGateway();
                         break;
                     default:
@@ -898,9 +892,6 @@ public class NativeHome extends Activity {
                         break;
                     case 2:
                         openSettings();
-                        break;
-                    case 3:
-                        reloadWebPage();
                         break;
                     default:
                         showAbout();
@@ -939,12 +930,6 @@ public class NativeHome extends Activity {
         } catch (Exception e) {
             toast("打不开浏览器：" + e.getMessage());
         }
-    }
-
-    /** 让内嵌网页重新读一遍（不重启网关）。 */
-    private void reloadWebPage() {
-        openWebUi();
-        toast("已打开网页界面，下拉即可刷新");
     }
 
     private void styleDialog(AlertDialog dlg) {
