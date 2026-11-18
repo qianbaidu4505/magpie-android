@@ -314,19 +314,6 @@ public final class Prefs {
         return sp(ctx).getBoolean("updates_managed", false);
     }
 
-    /**
-     * 网页按桌面宽屏排版（图1 那样设置 tab 全展开）还是按手机窄屏排版。
-     * 页面是 magpie 自带的 Web UI，排版完全由它自己的 CSS 响应式决定：
-     * 窄屏下 tab 行要横滑，宽屏下全铺开。
-     */
-    public static boolean desktopMode(Context ctx) {
-        return sp(ctx).getBoolean("desktop_mode", false);
-    }
-
-    public static void setDesktopMode(Context ctx, boolean on) {
-        sp(ctx).edit().putBoolean("desktop_mode", on).apply();
-    }
-
     public static void setUpdatesManaged(Context ctx, boolean on) {
         sp(ctx).edit().putBoolean("updates_managed", on).apply();
     }

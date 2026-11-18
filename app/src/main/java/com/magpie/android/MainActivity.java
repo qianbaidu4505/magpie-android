@@ -384,7 +384,6 @@ public class MainActivity extends Activity {
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
         s.setDatabaseEnabled(true);
-        s.setDatabaseEnabled(true);
         s.setAllowFileAccess(false);
         s.setAllowContentAccess(false);
         s.setAllowFileAccessFromFileURLs(false);
@@ -393,8 +392,11 @@ public class MainActivity extends Activity {
         s.setSupportZoom(false);
         s.setBuiltInZoomControls(false);
         s.setDisplayZoomControls(false);
-        s.setLoadWithOverviewMode(true);
-        s.setUseWideViewPort(true);
+        // 不设 setUseWideViewPort / setLoadWithOverviewMode：
+        // 它们会把 WebView 视口拉到 980px 的「宽视口」，覆盖 magpie 网页自己声明的
+        // <meta name="viewport" content="width=device-width">。宽视口下 CSS 宽度远大于
+        // 屏幕实际宽度，magpie 网页 @media(max-width:760px) 的手机适配全不命中，
+        // 弹窗/账号行/进度条全按桌面规格排版——全面屏（3200×1400）上尤其明显。
         s.setTextZoom(100);
 
         CookieManager cm = CookieManager.getInstance();
