@@ -30,6 +30,7 @@
         android:usesCleartextTraffic="true"
         android:roundIcon="@drawable/ic_magpie_bird"
         android:supportsRtl="true"
+        android:largeHeap="true"
         android:theme="@style/Theme.Magpie">
 
         <!-- 主界面：原生绘制，直连 magpie 的 HTTP 接口，不再是 WebView。
@@ -62,6 +63,12 @@
             android:exported="false"
             android:label="@string/settings_title"
             android:parentActivityName=".MainActivity" />
+
+        <activity
+            android:name=".UpdateSettingsActivity"
+            android:exported="false"
+            android:label="@string/update_settings_title"
+            android:parentActivityName=".NativeHome" />
 
         <!-- 更新页：问 GitHub（magpie 的发布清单）、下载新的 ELF、重启网关。
              拉的是二进制，不是 APK，所以不需要「安装未知应用」权限。 -->

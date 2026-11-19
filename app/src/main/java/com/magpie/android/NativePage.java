@@ -60,9 +60,9 @@ abstract class NativePage {
         refreshHint.setGravity(android.view.Gravity.CENTER);
         refreshHint.setPadding(0, ui.dp(2), 0, ui.dp(6));
 
-        // 下拉刷新：滚到顶再往下拽就重读这一页
+        // 下拉刷新：滚到顶再往下拽就重读这一页（60 秒内节流，只转动画）
         layout = new PullToRefresh(host, scroll, ui);
-        layout.setOnRefresh(() -> refresh(true));
+        layout.setOnRefresh(() -> pullRefresh());
     }
 
     View view() {
@@ -162,6 +162,31 @@ abstract class NativePage {
                 });
             }
         });
+    }
+
+    /**
+     * 下拉刷新专用：60 秒内重复下拉只转动画、不真正重新拉数据。
+     *
+     * <p>为什么单独一个方法：{@code refresh(true)} 还被切周期、重试、账号
+     * 刷新这些按钮用，那些必须真正刷新。只有下拉这个入口要节流。
+     */
+    void pullRefresh() {
+        if (loading) {
+            layout.finishRefresh();
+            return;
+        }
+        if (System.currentTimeMillis() - lastLoadAt < 60_000) {
+            // 只转一下动画表示收到了，不发请求
+            headerSpinner(true);
+            host.postDelayed(() -> {
+                headerSpinner(false);
+                if (layout != null) {
+                    layout.finishRefresh();
+                }
+            }, 600);
+            return;
+        }
+        refresh(true);
     }
 
     /** 后台任务收尾：一定要调用，否则页面会一直卡在加载态。 */

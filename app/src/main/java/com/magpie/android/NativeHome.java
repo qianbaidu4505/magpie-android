@@ -64,7 +64,7 @@ public class NativeHome extends Activity {
     static final int TAB_ROUTES = 3;
 
     /** 前台可见时多久自己刷一次页面数据。 */
-    private static final long AUTO_REFRESH = 30_000L;
+    private static final long AUTO_REFRESH = 40_000L;
 
     Ui ui;
 
@@ -395,7 +395,7 @@ public class NativeHome extends Activity {
         titles.addView(stateRow);
 
         gwPill = ui.text("", 11.5f, M3.ON_SURFACE_VARIANT, false);
-        gwPill.setBackground(ui.roundStroke(ui.col(M3.SURFACE),
+        gwPill.setBackground(ui.glowStroke(ui.col(M3.SURFACE),
                 999, ui.col(M3.OUTLINE_VARIANT), 1));
         gwPill.setPadding(ui.dp(10), ui.dp(5), ui.dp(10), ui.dp(5));
         gwPill.setGravity(Gravity.CENTER);
@@ -411,7 +411,8 @@ public class NativeHome extends Activity {
         // 中间的「插件」胶囊：和「局域网」同一套样式，点一下直接开网页的
         // 插件页（插件安装、登录、开关都在那里，原生做不完）。
         pluginPill = ui.text("插件", 11.5f, M3.ON_SECONDARY_CONTAINER, false);
-        pluginPill.setBackground(ui.round(ui.col(M3.SECONDARY_CONTAINER), 999));
+        pluginPill.setBackground(ui.glowStroke(ui.col(M3.SECONDARY_CONTAINER),
+                999, ui.col(M3.SECONDARY_CONTAINER), 0));
         pluginPill.setPadding(ui.dp(9), ui.dp(5), ui.dp(9), ui.dp(5));
         pluginPill.setGravity(Gravity.CENTER);
         pluginPill.setOnClickListener(v -> openWebView("plugins"));
@@ -420,7 +421,8 @@ public class NativeHome extends Activity {
         header.addView(pluginPill, plp);
 
         lanPill = ui.text("", 11.5f, M3.ON_SECONDARY_CONTAINER, false);
-        lanPill.setBackground(ui.round(ui.col(M3.SECONDARY_CONTAINER), 999));
+        lanPill.setBackground(ui.glowStroke(ui.col(M3.SECONDARY_CONTAINER),
+                999, ui.col(M3.SECONDARY_CONTAINER), 0));
         lanPill.setPadding(ui.dp(9), ui.dp(5), ui.dp(9), ui.dp(5));
         lanPill.setGravity(Gravity.CENTER);
         lanPill.setOnClickListener(v -> showLanDialog());
@@ -546,21 +548,28 @@ public class NativeHome extends Activity {
 
     void selectTab(int which, boolean refresh) {
         tab = Math.max(0, Math.min(3, which));
+        // 设计稿：选中态用青色文字 + 青色图标，无胶囊背景，更克制
+        int onFg = ui.design ? M3.PRIMARY : M3.ON_SECONDARY_CONTAINER;
         for (int i = 0; i < tabViews.size(); i++) {
             boolean on = i == tab;
             TextView t = tabViews.get(i);
-            t.setTextColor(on ? ui.col(M3.ON_SECONDARY_CONTAINER) : ui.col(M3.ON_SURFACE_VARIANT));
+            t.setTextColor(on ? ui.col(onFg) : ui.col(M3.ON_SURFACE_VARIANT));
             if (i < tabGlyphs.size()) {
                 tabGlyphs.get(i).setTextColor(on
-                        ? ui.col(M3.ON_SECONDARY_CONTAINER) : ui.col(M3.ON_SURFACE_VARIANT));
+                        ? ui.col(onFg) : ui.col(M3.ON_SURFACE_VARIANT));
                 tabGlyphs.get(i).setAlpha(on ? 1f : 0.75f);
             }
-            // 选中那颗带一层很淡的底：玻璃胶囊本身已经是亮的，再叠一块
-            // 实心的 secondaryContainer 会糊成一坨。用 22% 的主题色。
             if (i < tabItems.size()) {
-                int tint = ui.col(M3.SECONDARY_CONTAINER);
-                int soft = (tint & 0x00FFFFFF) | 0x38000000;
-                tabItems.get(i).setBackground(on ? ui.round(soft, 999) : null);
+                if (ui.design) {
+                    // 设计稿：无胶囊底，保持透明
+                    tabItems.get(i).setBackground(null);
+                } else {
+                    // 选中那颗带一层很淡的底：玻璃胶囊本身已经是亮的，再叠一块
+                    // 实心的 secondaryContainer 会糊成一坨。用 22% 的主题色。
+                    int tint = ui.col(M3.SECONDARY_CONTAINER);
+                    int soft = (tint & 0x00FFFFFF) | 0x38000000;
+                    tabItems.get(i).setBackground(on ? ui.round(soft, 999) : null);
+                }
             }
         }
         // 上一个页如果挂着常驻轮询，先收掉，别在后台空转；
@@ -710,7 +719,7 @@ public class NativeHome extends Activity {
                 {"打开控制后台"},
                 {"重启网关", "查看日志", "复制网关地址", "忽略电池优化"},
                 {"导入本地插件", "粘贴 Marvis 登录回调", "文件管理器", "省电策略实验室"},
-                {"检查 magpie 更新", "检查 App 更新"},
+                {"检查 magpie 更新", "检查 App 更新", "更新设置"},
                 {"复制网页登录链接", "用浏览器打开", "设置", "关于"},
         };
         final String[][] subs = {
@@ -722,7 +731,8 @@ public class NativeHome extends Activity {
                         "浏览器里登录完，把地址栏整条 URL 贴进来",
                         "浏览、导入、删除、复制 magpie HOME 目录里的文件",
                         "诊断后台被冻结的原因，可一键设无限制（需 root）"},
-                {"拉 GitHub 上的新版二进制，不用重装 APK", "下载新版 APK 并调系统安装器"},
+                {"拉 GitHub 上的新版二进制，不用重装 APK", "下载新版 APK 并调系统安装器",
+                        "内核与壳软件各自的稳定/测试渠道和更新源"},
                 {"带 k= 的完整网页地址，粘到浏览器里直接登进去（绕过登录页）",
                         "交给系统浏览器，方便用电脑上的工具看",
                         "端口、局域网访问、外观与开机启动",
@@ -732,7 +742,7 @@ public class NativeHome extends Activity {
                 {"\u2699"},
                 {"\u27f3", "\u25a4", "\u29c9", "\u26a1"},
                 {"\u2913", "\u270e", "\u25a4", "\u26a1"},
-                {"\u21e9", "\u2b07"},
+                {"\u21e9", "\u2b07", "\u2699"},
                 {"\u29c9", "\u2197", "\u2699", "\u24d8"},
         };
 
@@ -809,9 +819,12 @@ public class NativeHome extends Activity {
     /** 菜单里一张可点的卡片：图标底块 + 标题 + 说明，带描边和涟漪。 */
     private View menuCard(String icon, String title, String sub, Runnable action) {
         LinearLayout row = ui.row();
-        GradientDrawable cardBg = ui.roundStroke(ui.col(M3.SURFACE_CONTAINER), 16,
+        GradientDrawable cardBg = ui.glowStroke(ui.col(M3.SURFACE_CONTAINER), 16,
                 ui.col(M3.OUTLINE_VARIANT), 1);
         ui.clickable(row, cardBg);
+        if (ui.design) {
+            row.setElevation(ui.dp(6));
+        }
         row.setPadding(ui.dp(12), ui.dp(11), ui.dp(12), ui.dp(11));
         LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -881,8 +894,10 @@ public class NativeHome extends Activity {
             case 3: // 更新
                 if (index == 0) {
                     startActivity(new Intent(this, UpdateActivity.class));
-                } else {
+                } else if (index == 1) {
                     ShellUpdateFlow.checkNow(this, this::styleDialog);
+                } else {
+                    startActivity(new Intent(this, UpdateSettingsActivity.class));
                 }
                 break;
             default: // 其他

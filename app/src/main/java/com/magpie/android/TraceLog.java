@@ -55,7 +55,7 @@ final class TraceLog {
      *
      * <p>{@link LivePanel} 的长轮询每 26 秒最多回一次，每次只带「变化的」
      * 路由；只靠最新一批的话，前一条会从列表里消失。这里按 id 攒着，
-     * 最多留 40 条。
+     * 最多留 10 条。
      */
     private final java.util.LinkedHashMap<Long, JSONObject> liveBuffer =
             new java.util.LinkedHashMap<>();
@@ -103,7 +103,7 @@ final class TraceLog {
 
     // ------------------------------------------------------------------
 
-    /** 拉日期列表（一次），然后画标签。 */
+    /** 拉日期列表（一次），然后画标签。只留今天、昨天两个。 */
     void loadDays() {
         host.bg(() -> {
             MagpieApi.Result r = MagpieApi.get(host, "/api/gateway/history?day=", 8000, 20000);
@@ -112,15 +112,29 @@ final class TraceLog {
             }
             JSONObject o = r.json();
             JSONArray arr = NativeData.arr(o, "days");
+            // 只保留今天和昨天，更早的历史不要了
+            java.text.SimpleDateFormat todayFmt = new java.text.SimpleDateFormat("yyyy-MM-dd",
+                    java.util.Locale.US);
+            long now = System.currentTimeMillis();
+            long dayMs = 24L * 3600 * 1000;
+            String today = todayFmt.format(new java.util.Date(now));
+            String yesterday = todayFmt.format(new java.util.Date(now - dayMs));
             List<String[]> out = new ArrayList<>();
-            for (int i = 0; i < arr.length() && i < 6; i++) {
+            for (int i = 0; i < arr.length(); i++) {
                 JSONObject d = arr.optJSONObject(i);
                 if (d == null) {
                     continue;
                 }
+                String day = NativeData.str(d, "day", "");
+                if (!day.equals(today) && !day.equals(yesterday)) {
+                    continue;
+                }
                 out.add(new String[]{
-                        NativeData.str(d, "day", ""),
+                        day,
                         String.valueOf(NativeData.num(d, "requests"))});
+                if (out.size() >= 2) {
+                    break;
+                }
             }
             host.post(() -> {
                 days.clear();
@@ -149,8 +163,8 @@ final class TraceLog {
             }
             liveBuffer.put(r.optLong("id", 0), r);
         }
-        // 只留最近 40 条
-        while (liveBuffer.size() > 40) {
+        // 只留最近 10 条
+        while (liveBuffer.size() > 10) {
             java.util.Iterator<Long> it = liveBuffer.keySet().iterator();
             if (it.hasNext()) {
                 it.next();
@@ -244,7 +258,7 @@ final class TraceLog {
             return;
         }
         // 最新的在上
-        int n = Math.min(liveRoutes.length(), 30);
+        int n = Math.min(liveRoutes.length(), 10);
         for (int i = liveRoutes.length() - 1; i >= liveRoutes.length() - n; i--) {
             JSONObject r = liveRoutes.optJSONObject(i);
             if (r != null) {
@@ -282,29 +296,53 @@ final class TraceLog {
         host.bg(() -> {
             MagpieApi.Result r = MagpieApi.get(host,
                     "/api/gateway/history?day=" + android.net.Uri.encode(day), 8000, 25000);
-            host.post(() -> {
-                list.removeAllViews();
-                if (!r.ok()) {
+            if (!r.ok()) {
+                host.post(() -> {
+                    list.removeAllViews();
                     TextView t = ui.text("读不到这一天的记录：" + r.why(), 11.5f,
                             M3.ERROR, false);
                     t.setPadding(0, ui.dp(16), 0, 0);
                     list.addView(t);
-                    return;
-                }
-                JSONObject o = r.json();
+                });
+                return;
+            }
+            // 关键：17MB 的 history JSON 绝不能在主线程 new JSONObject ——
+            // 会把 256MB 堆打满直接 OOM。在后台线程解析，只把最后 10 条
+            // 小对象带回去，主线程只负责画 View。
+            final JSONArray last;
+            try {
+                JSONObject o = new JSONObject(r.body);
                 JSONArray routes = NativeData.arr(o, "routes");
-                if (routes.length() == 0) {
+                int n = Math.min(routes.length(), 10);
+                last = new JSONArray();
+                // History 返回 oldest first；从末尾取，最新 10 条置顶。
+                for (int i = routes.length() - 1; i >= routes.length() - n; i--) {
+                    JSONObject x = routes.optJSONObject(i);
+                    if (x != null) {
+                        last.put(x);
+                    }
+                }
+            } catch (Throwable t) {
+                final String msg = t.getMessage() == null ? t.toString() : t.getMessage();
+                host.post(() -> {
+                    list.removeAllViews();
+                    TextView e = ui.text("记录解析失败：" + msg, 11.5f, M3.ERROR, false);
+                    e.setPadding(0, ui.dp(16), 0, 0);
+                    list.addView(e);
+                });
+                return;
+            }
+            host.post(() -> {
+                list.removeAllViews();
+                if (last.length() == 0) {
                     TextView t = ui.text("这一天没有记录", 11.5f,
                             M3.ON_SURFACE_VARIANT, false);
                     t.setPadding(0, ui.dp(16), 0, 0);
                     list.addView(t);
                     return;
                 }
-                // History 返回 oldest first（magpie/internal/gateway/history.go）；
-                // 从末尾开始取，保证最新 50 条置顶，而非先显示最早的 50 条。
-                int n = Math.min(routes.length(), 50);
-                for (int i = routes.length() - 1; i >= routes.length() - n; i--) {
-                    JSONObject x = routes.optJSONObject(i);
+                for (int i = 0; i < last.length(); i++) {
+                    JSONObject x = last.optJSONObject(i);
                     if (x != null) {
                         list.addView(row(x));
                     }
@@ -315,12 +353,6 @@ final class TraceLog {
 
     /** 一条请求：时刻 + 模型 + 耗时 / 下面一行 供应商 · Agent · token · 费用。 */
     private View row(JSONObject r) {
-        JSONObject o = new JSONObject();
-        try {
-            // 兼容 trace 的 Route 与 history 的 Route：字段名一致
-        } catch (Exception ignored) {
-        }
-
         LinearLayout box = ui.column();
         LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);

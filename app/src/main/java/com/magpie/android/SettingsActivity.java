@@ -23,9 +23,6 @@ import android.widget.RadioButton;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import java.util.ArrayList;
-import java.util.List;
-
 /**
  * The three things worth touching on a phone: which port the gateway listens
  * on, whether it is reachable from other devices on the same Wi-Fi, and
@@ -42,11 +39,9 @@ public class SettingsActivity extends Activity {
 
     private EditText port;
     private Switch lan;
-    private Switch monet;
-    private LinearLayout seedBar;
     private RadioGroup unitsGroup;
+    private RadioGroup themeGroup;
     private Switch shellAutoCheck;
-    private TextView shellMirrorValue;
     private RadioGroup webReleaseGroup;
     private RadioButton webReleaseNever;
     private RadioButton webRelease10;
@@ -102,9 +97,22 @@ public class SettingsActivity extends Activity {
         // 打开设置时对一下：magpie 网页里改过共享的话，以那边为准回写壳
         syncLanFromMagpie();
 
-
-        monet = findViewById(R.id.monet);
-        seedBar = findViewById(R.id.colors_seed);
+        // 外观：深色 / 浅色 / 跟随系统
+        themeGroup = findViewById(R.id.theme_group);
+        RadioButton thSystem = findViewById(R.id.theme_system);
+        RadioButton thDark = findViewById(R.id.theme_dark);
+        RadioButton thLight = findViewById(R.id.theme_light);
+        int tm = Prefs.themeMode(this);
+        (tm == 1 ? thDark : tm == 2 ? thLight : thSystem).setChecked(true);
+        themeGroup.setOnCheckedChangeListener((group, checkedId) -> {
+            int mode = checkedId == R.id.theme_dark ? 1
+                    : checkedId == R.id.theme_light ? 2 : 0;
+            if (mode == Prefs.themeMode(SettingsActivity.this)) {
+                return;
+            }
+            Prefs.setThemeMode(SettingsActivity.this, mode);
+            recreate();
+        });
 
         // 数字单位：英文 K/M/B ↔ 中文 万/亿，选了立刻生效
         unitsGroup = findViewById(R.id.units_group);
@@ -119,19 +127,6 @@ public class SettingsActivity extends Activity {
             int mode = checkedId == R.id.units_zh ? 1 : 0;
             Prefs.setUnitMode(SettingsActivity.this, mode);
             NativeData.setUnitMode(mode);
-        });
-        boolean canMonet = Build.VERSION.SDK_INT >= 31;
-        monet.setChecked(Prefs.monet(this) && canMonet);
-        monet.setEnabled(canMonet);
-        if (!canMonet) {
-            monet.setText(R.string.settings_monet_unavailable);
-        }
-        monet.setOnCheckedChangeListener((button, checked) -> {
-            if (checked == Prefs.monet(SettingsActivity.this)) {
-                return;
-            }
-            Prefs.setMonet(SettingsActivity.this, checked);
-            recreate();
         });
 
         // 保存并重启 App。
@@ -167,13 +162,9 @@ public class SettingsActivity extends Activity {
         shellAutoCheck.setChecked(Prefs.shellAutoCheck(this));
         shellAutoCheck.setOnCheckedChangeListener((button, checked) ->
                 Prefs.setShellAutoCheck(SettingsActivity.this, checked));
-        shellMirrorValue = findViewById(R.id.shell_mirror_value);
-        shellMirrorValue.setOnClickListener(v -> showMirrorDialog());
-        findViewById(R.id.shell_add_mirror).setOnClickListener(v -> showAddMirrorDialog());
         findViewById(R.id.shell_lanzou).setOnClickListener(v -> openLanzou());
         ((TextView) findViewById(R.id.hint_shell_lanzou)).setText(
                 getString(R.string.shell_lanzou_hint, getString(R.string.shell_lanzou_password)));
-        refreshMirrorLabel();
 
         paint();
     }
@@ -341,8 +332,8 @@ public class SettingsActivity extends Activity {
         ((TextView) findViewById(R.id.settings_title)).setTextColor(c[M3.ON_SURFACE]);
 
         int[] cards = {R.id.card_port, R.id.card_lan, R.id.card_background,
-                R.id.card_background_guide, R.id.card_units, R.id.card_appearance,
-                R.id.card_seed, R.id.card_shell_update};
+                R.id.card_background_guide, R.id.card_appearance, R.id.card_units,
+                R.id.card_shell_update};
         for (int id : cards) {
             View card = findViewById(id);
             GradientDrawable bg = new GradientDrawable();
@@ -352,15 +343,14 @@ public class SettingsActivity extends Activity {
         }
 
         int[] labels = {R.id.label_port, R.id.label_web_memory, R.id.label_background_guide,
-                R.id.label_units, R.id.label_seed, R.id.label_shell_update,
-                R.id.label_shell_mirror};
+                R.id.label_appearance, R.id.label_units, R.id.label_shell_update};
         for (int id : labels) {
             ((TextView) findViewById(id)).setTextColor(c[M3.ON_SURFACE]);
         }
         int[] hints = {R.id.hint_port, R.id.hint_lan, R.id.hint_web_memory,
-                R.id.hint_background_guide, R.id.hint_units,
-                R.id.monet_hint, R.id.hint_seed, R.id.hint_shell_auto_check,
-                R.id.hint_shell_mirror, R.id.hint_shell_lanzou};
+                R.id.hint_background_guide, R.id.hint_appearance, R.id.hint_units,
+                R.id.hint_shell_auto_check,
+                R.id.hint_shell_lanzou};
         for (int id : hints) {
             ((TextView) findViewById(id)).setTextColor(c[M3.ON_SURFACE_VARIANT]);
         }
@@ -368,35 +358,27 @@ public class SettingsActivity extends Activity {
         field(port);
         field(webReleaseCustomMinutes);
         tintSwitch(lan);
-        tintSwitch(monet);
         tintRadio(webReleaseNever);
         tintRadio(webRelease10);
         tintRadio(webRelease15);
         tintRadio(webRelease30);
         tintRadio(webReleaseCustom);
+        tintRadio((RadioButton) findViewById(R.id.theme_system));
+        tintRadio((RadioButton) findViewById(R.id.theme_dark));
+        tintRadio((RadioButton) findViewById(R.id.theme_light));
         ((Switch) lan).setTextColor(c[M3.ON_SURFACE]);
-        ((Switch) monet).setTextColor(c[M3.ON_SURFACE]);
         ((Switch) shellAutoCheck).setTextColor(c[M3.ON_SURFACE]);
         tintSwitch(shellAutoCheck);
 
-        // 镜像选择框：和输入框一个样
-        GradientDrawable mvBg = new GradientDrawable();
-        mvBg.setColor(c[M3.SURFACE_CONTAINER_HIGHEST]);
-        mvBg.setCornerRadius(dp(12));
-        mvBg.setStroke(dp(1), c[M3.OUTLINE_VARIANT]);
-        shellMirrorValue.setBackground(mvBg);
-        shellMirrorValue.setTextColor(c[M3.ON_SURFACE]);
+        // 镜像选择框已移到更新设置页，这里不再有
 
         outlined(findViewById(R.id.open_notification_settings));
         outlined(findViewById(R.id.open_battery_settings));
         outlined(findViewById(R.id.open_background_guide));
-        outlined(findViewById(R.id.shell_add_mirror));
         outlined(findViewById(R.id.shell_lanzou));
 
         filled(findViewById(R.id.save));
         tonal(findViewById(R.id.restart));
-
-        paintSeeds();
     }
 
     /** 输入框：M3 filled text field 的简化版。 */
@@ -462,110 +444,9 @@ public class SettingsActivity extends Activity {
         b.setStateListAnimator(null);
     }
 
-    /** 八套种子色：均分一排圆点，选中的加一圈 on-surface 描边。 */
-    private void paintSeeds() {
-        seedBar.removeAllViews();
-        int size = dp(40);
-        int gap = dp(6);
-        int selected = Prefs.seed(this);
-        for (int i = 0; i < M3.SEEDS.length; i++) {
-            final int index = i;
-            TextView dot = new TextView(this);
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, size, 1f);
-            lp.rightMargin = i == M3.SEEDS.length - 1 ? 0 : gap;
-            dot.setLayoutParams(lp);
-            dot.setGravity(Gravity.CENTER);
-            dot.setContentDescription(M3.SEED_NAMES[i]);
-            dot.setText(selected == i ? "\u2713" : "");
-            dot.setTextSize(16);
-
-            GradientDrawable bg = new GradientDrawable();
-            bg.setShape(GradientDrawable.OVAL);
-            bg.setColor(M3.seedColor(this, i));
-            if (selected == i) {
-                bg.setStroke(dp(3), c[M3.ON_SURFACE]);
-                dot.setTextColor(M3.onSeed(this, i));
-            }
-            dot.setBackground(bg);
-            dot.setOnClickListener(v -> {
-                if (Prefs.seed(SettingsActivity.this) == index
-                        && !Prefs.monet(SettingsActivity.this)) {
-                    return;
-                }
-                Prefs.setSeed(SettingsActivity.this, index);
-                Prefs.setMonet(SettingsActivity.this, false);
-                recreate();
-            });
-            seedBar.addView(dot);
-        }
-    }
-
     // ------------------------------------------------------------------
-    // App 自更新：镜像选择 + 蓝奏云
+    // App 自更新：蓝奏云入口
     // ------------------------------------------------------------------
-
-    /** 显示/刷新当前镜像名。 */
-    private void refreshMirrorLabel() {
-        String cur = Prefs.shellMirror(this);
-        if (cur == null || cur.isEmpty()) {
-            shellMirrorValue.setText(R.string.shell_mirror_official);
-        } else {
-            shellMirrorValue.setText(cur);
-        }
-    }
-
-    /** 弹镜像选择：内置几条 + 用户手动添加的。 */
-    private void showMirrorDialog() {
-        List<String> prefixes = new ArrayList<>();
-        List<String> names = new ArrayList<>();
-        for (int i = 0; i < ShellUpdater.MIRROR_PREFIXES.length; i++) {
-            prefixes.add(ShellUpdater.MIRROR_PREFIXES[i]);
-            names.add(ShellUpdater.MIRROR_NAMES[i]);
-        }
-        for (String p : Prefs.shellCustomMirrors(this)) {
-            prefixes.add(p);
-            names.add(p);
-        }
-        final String[] items = names.toArray(new String[0]);
-        AlertDialog dlg = new AlertDialog.Builder(this)
-                .setTitle(R.string.shell_mirror_dialog_title)
-                .setItems(items, (d, which) -> {
-                    Prefs.setShellMirror(this, prefixes.get(which));
-                    refreshMirrorLabel();
-                })
-                .setNegativeButton(android.R.string.cancel, null)
-                .create();
-        styleDialog(dlg);
-        dlg.show();
-    }
-
-    /** 添加自定义镜像前缀。 */
-    private void showAddMirrorDialog() {
-        final EditText input = new EditText(this);
-        input.setHint("https://example.com/");
-        input.setSingleLine(true);
-        input.setTextColor(c[M3.ON_SURFACE]);
-        input.setHintTextColor(c[M3.ON_SURFACE_VARIANT]);
-        AlertDialog dlg = new AlertDialog.Builder(this)
-                .setTitle(R.string.shell_mirror_add_title)
-                .setMessage(R.string.shell_mirror_add_hint)
-                .setView(input)
-                .setPositiveButton(android.R.string.ok, (d, w) -> {
-                    String p = input.getText().toString().trim();
-                    if (!p.isEmpty()) {
-                        if (!p.endsWith("/")) {
-                            p = p + "/";
-                        }
-                        Prefs.addShellCustomMirror(this, p);
-                        Prefs.setShellMirror(this, p);
-                        refreshMirrorLabel();
-                    }
-                })
-                .setNegativeButton(android.R.string.cancel, null)
-                .create();
-        styleDialog(dlg);
-        dlg.show();
-    }
 
     /** 蓝奏云：复制密码到剪贴板 + 打开分享页。 */
     private void openLanzou() {

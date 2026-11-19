@@ -31,11 +31,14 @@ final class Ui {
     final Context ctx;
     final int[] c;
     final float density;
+    /** 是不是「青绿·设计稿」主题：卡片换发光描边、大圆角、独立 2×2 网格。 */
+    final boolean design;
 
     Ui(Context ctx) {
         this.ctx = ctx;
         this.c = M3.current(ctx);
         this.density = ctx.getResources().getDisplayMetrics().density;
+        this.design = M3.design(ctx);
     }
 
     // ------------------------------------------------------------------
@@ -67,8 +70,39 @@ final class Ui {
         return d;
     }
 
+    /**
+     * 发光描边：设计稿主题下用主色低透明描边（加粗、更亮、有发光感），
+     * 其它主题退回普通描边。所有内嵌小卡/菜单/胶囊统一走这里。
+     */
+    GradientDrawable glowStroke(int color, float radiusDp, int fallbackStroke, float fallbackDp) {
+        if (design) {
+            int stroke = (c[M3.PRIMARY] & 0x00FFFFFF) | 0x52000000;
+            return roundStroke(color, radiusDp, stroke, 1.5f);
+        }
+        return roundStroke(color, radiusDp, fallbackStroke, fallbackDp);
+    }
+
+    /** 给一个可点卡片挂上发光底 + 悬浮阴影。 */
+    void glowCard(View v, GradientDrawable bg) {
+        v.setBackground(bg);
+        if (design) {
+            v.setElevation(dp(6));
+            if (android.os.Build.VERSION.SDK_INT >= 28) {
+                v.setOutlineAmbientShadowColor(0x22000000);
+                v.setOutlineSpotShadowColor(0x33000000);
+            }
+        }
+    }
+
     /** 卡片底：surface container low + 1dp outline variant 描边。 */
     GradientDrawable cardBg() {
+        if (design) {
+            // 设计稿：卡片用玻璃底 + 青色发光描边，描边加粗，圆角更大更软。
+            // 描边用主色的低透明版本，视觉上像发光的边缘。
+            int stroke = (c[M3.PRIMARY] & 0x00FFFFFF) | 0x52000000;
+            GradientDrawable d = roundStroke(c[M3.SURFACE_CONTAINER_LOW], 24f, stroke, 1.5f);
+            return d;
+        }
         return roundStroke(c[M3.SURFACE_CONTAINER_LOW], 20f, c[M3.OUTLINE_VARIANT], 1f);
     }
 
@@ -90,6 +124,14 @@ final class Ui {
         box.setBackground(cardBg());
         int p = dp(16);
         box.setPadding(p, p, p, p);
+        if (design) {
+            // 悬浮感：设计稿卡片要有柔和阴影，从背景里浮起来
+            box.setElevation(dp(8));
+            if (android.os.Build.VERSION.SDK_INT >= 28) {
+                box.setOutlineAmbientShadowColor(0x22000000);
+                box.setOutlineSpotShadowColor(0x33000000);
+            }
+        }
         return box;
     }
 
@@ -208,7 +250,7 @@ final class Ui {
 
     View divider() {
         View v = new View(ctx);
-        v.setBackgroundColor(c[M3.OUTLINE_VARIANT]);
+        v.setBackgroundColor(design ? 0x00000000 : c[M3.OUTLINE_VARIANT]);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, dp(1)));
         lp.topMargin = dp(10);
@@ -444,5 +486,189 @@ final class Ui {
         BarChart b = new BarChart(ctx);
         b.style(c[M3.PRIMARY], c[M3.SURFACE_CONTAINER_HIGHEST], c[M3.ON_SURFACE_VARIANT]);
         return b;
+    }
+
+    // ------------------------------------------------------------------
+    // 渐变面积折线图（设计稿那张）
+    // ------------------------------------------------------------------
+
+    /**
+     * 平滑曲线 + 向下渐变填充的面积图，左侧带 Y 轴刻度与虚线网格。
+     *
+     * <p>用三次贝塞尔把相邻点连成平滑曲线（控制点取两点水平中点，
+     * 这是最常用也最不容易过冲的做法），下面用 LinearGradient 从强调色
+     * 渐隐到透明。
+     */
+    static final class AreaChart extends View {
+
+        private float[] values = new float[0];
+        private String[] labels = new String[0];
+        private final Paint linePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint gridPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint dotPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final android.graphics.Path line = new android.graphics.Path();
+        private final android.graphics.Path area = new android.graphics.Path();
+        private int accent, grid, text, surface;
+        private float density;
+
+        AreaChart(Context ctx) {
+            super(ctx);
+            density = ctx.getResources().getDisplayMetrics().density;
+            linePaint.setStyle(Paint.Style.STROKE);
+            linePaint.setStrokeWidth(2f * density);
+            linePaint.setStrokeCap(Paint.Cap.ROUND);
+            linePaint.setStrokeJoin(Paint.Join.ROUND);
+            fillPaint.setStyle(Paint.Style.FILL);
+            gridPaint.setStyle(Paint.Style.STROKE);
+            gridPaint.setStrokeWidth(1f);
+            gridPaint.setPathEffect(new android.graphics.DashPathEffect(
+                    new float[]{3f * density, 4f * density}, 0));
+            textPaint.setTextSize(9f * density);
+            textPaint.setTextAlign(Paint.Align.RIGHT);
+            dotPaint.setStyle(Paint.Style.FILL);
+        }
+
+        void style(int accentColor, int gridColor, int textColor, int surfaceColor) {
+            accent = accentColor;
+            grid = gridColor;
+            text = textColor;
+            surface = surfaceColor;
+            linePaint.setColor(accentColor);
+            gridPaint.setColor(gridColor);
+            textPaint.setColor(textColor);
+            dotPaint.setColor(accentColor);
+            invalidate();
+        }
+
+        void setData(float[] v, String[] l) {
+            values = v == null ? new float[0] : v;
+            labels = l == null ? new String[0] : l;
+            invalidate();
+        }
+
+        @Override
+        protected void onMeasure(int widthSpec, int heightSpec) {
+            setMeasuredDimension(MeasureSpec.getSize(widthSpec),
+                    Math.round(150 * density));
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            float w = getWidth(), h = getHeight();
+            float padL = 26 * density, padR = 8 * density;
+            float padT = 10 * density, padB = 18 * density;
+            float cw = w - padL - padR, ch = h - padT - padB;
+            if (cw <= 0 || ch <= 0) {
+                return;
+            }
+
+            // ---- Y 轴刻度与虚线网格（0 / 25% / 50% / 75% / 100%）----
+            float max = 0;
+            for (float v : values) {
+                max = Math.max(max, v);
+            }
+            if (max <= 0) {
+                max = 1;
+            }
+            for (int i = 0; i <= 4; i++) {
+                float y = padT + ch * i / 4f;
+                canvas.drawLine(padL, y, w - padR, y, gridPaint);
+                float val = max * (4 - i) / 4f;
+                canvas.drawText(shortNum(val), padL - 4 * density,
+                        y + 3 * density, textPaint);
+            }
+
+            if (values.length == 0) {
+                textPaint.setTextAlign(Paint.Align.CENTER);
+                canvas.drawText("暂无数据", w / 2f, padT + ch / 2f, textPaint);
+                textPaint.setTextAlign(Paint.Align.RIGHT);
+                return;
+            }
+
+            // ---- 计算各点坐标 ----
+            int n = values.length;
+            float step = n > 1 ? cw / (n - 1) : 0;
+            float[] xs = new float[n];
+            float[] ys = new float[n];
+            for (int i = 0; i < n; i++) {
+                xs[i] = padL + step * i;
+                ys[i] = padT + ch * (1f - values[i] / max);
+            }
+
+            // ---- 平滑曲线 ----
+            line.reset();
+            line.moveTo(xs[0], ys[0]);
+            for (int i = 1; i < n; i++) {
+                float mx = (xs[i - 1] + xs[i]) / 2f;
+                line.cubicTo(mx, ys[i - 1], mx, ys[i], xs[i], ys[i]);
+            }
+
+            // ---- 面积填充（从曲线到底部）----
+            area.reset();
+            area.addPath(line);
+            area.lineTo(xs[n - 1], padT + ch);
+            area.lineTo(xs[0], padT + ch);
+            area.close();
+            fillPaint.setShader(new android.graphics.LinearGradient(
+                    0, padT, 0, padT + ch,
+                    (accent & 0x00FFFFFF) | 0x55000000,
+                    (accent & 0x00FFFFFF) | 0x00000000,
+                    android.graphics.Shader.TileMode.CLAMP));
+            canvas.drawPath(area, fillPaint);
+            fillPaint.setShader(null);
+
+            // ---- 曲线 ----
+            canvas.drawPath(line, linePaint);
+
+            // ---- 末端高亮点 ----
+            if (n > 0) {
+                canvas.drawCircle(xs[n - 1], ys[n - 1], 3.5f * density, dotPaint);
+                dotPaint.setColor(surface);
+                canvas.drawCircle(xs[n - 1], ys[n - 1], 1.6f * density, dotPaint);
+                dotPaint.setColor(accent);
+            }
+
+            // ---- X 轴标签：首 / 中 / 尾 ----
+            if (labels.length > 0) {
+                textPaint.setTextAlign(Paint.Align.CENTER);
+                int[] idx = {0, n / 2, n - 1};
+                for (int i : idx) {
+                    if (i < 0 || i >= labels.length || labels[i] == null) {
+                        continue;
+                    }
+                    float cx = Math.max(20 * density, Math.min(w - 20 * density, xs[i]));
+                    canvas.drawText(labels[i], cx, h - 4 * density, textPaint);
+                }
+                textPaint.setTextAlign(Paint.Align.RIGHT);
+            }
+        }
+
+        /** Y 轴刻度用的小数字：1234 → 1.2k，1200000 → 1.2M。 */
+        private String shortNum(float v) {
+            if (v >= 1_000_000) {
+                return trim(v / 1_000_000f) + "M";
+            }
+            if (v >= 1000) {
+                return trim(v / 1000f) + "k";
+            }
+            return String.valueOf(Math.round(v));
+        }
+
+        private String trim(float v) {
+            if (v >= 100) {
+                return String.valueOf(Math.round(v));
+            }
+            String s = String.format(java.util.Locale.US, "%.1f", v);
+            return s.endsWith(".0") ? s.substring(0, s.length() - 2) : s;
+        }
+    }
+
+    AreaChart areaChart() {
+        AreaChart a = new AreaChart(ctx);
+        a.style(c[M3.PRIMARY], c[M3.OUTLINE_VARIANT], c[M3.ON_SURFACE_VARIANT],
+                c[M3.SURFACE_CONTAINER_LOW]);
+        return a;
     }
 }

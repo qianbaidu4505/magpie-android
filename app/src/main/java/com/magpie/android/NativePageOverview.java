@@ -30,8 +30,8 @@ import java.util.Map;
  */
 final class NativePageOverview extends NativePage {
 
-    /** 额度要问供应商，很贵：同一份结果两分钟内不重复拉。 */
-    private static final long QUOTA_TTL = 2 * 60 * 1000L;
+    /** 额度要问供应商，很贵：同一份结果 20 分钟内不重复拉。 */
+    private static final long QUOTA_TTL = 20 * 60 * 1000L;
 
     /**
      * 还在读的时候重提不受 TTL 管。
@@ -170,6 +170,33 @@ final class NativePageOverview extends NativePage {
      * <p>网页是下拉菜单，手机上横排点一下就换更快，也少一次弹窗。
      */
     private View periodBar() {
+        // 设计稿：下划线选中态（青色文字 + 短横线），等宽均分，无胶囊背景
+        if (ui.design) {
+            LinearLayout row = ui.row();
+            LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            rlp.setMargins(ui.dp(14), ui.dp(8), ui.dp(14), ui.dp(2));
+            row.setLayoutParams(rlp);
+            for (String[] opt : PERIODS) {
+                final String value = opt[0];
+                boolean on = value.equals(period);
+                TextView t = ui.text(opt[1], 13, on ? M3.PRIMARY : M3.ON_SURFACE_VARIANT, on);
+                t.setGravity(Gravity.CENTER);
+                t.setPadding(0, ui.dp(8), 0, ui.dp(8));
+                // 选中时文字下画一条细短下划线（2dp 高，更精致）
+                t.setBackground(on ? underline(ui.col(M3.PRIMARY), ui.dp(16), ui.dp(2))
+                        : null);
+                t.setOnClickListener(v -> {
+                    if (!value.equals(period)) {
+                        period = value;
+                        refresh(true);
+                    }
+                });
+                row.addView(t, ui.weight(1));
+            }
+            return row;
+        }
+
         LinearLayout row = ui.row();
         LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -196,6 +223,18 @@ final class NativePageOverview extends NativePage {
             row.addView(t, lp);
         }
         return row;
+    }
+
+    /** 设计稿分段标签的下划线：一条贴底的圆角短横。 */
+    private android.graphics.drawable.Drawable underline(int color, int widthDp, int heightDp) {
+        android.graphics.drawable.GradientDrawable d = new android.graphics.drawable.GradientDrawable();
+        d.setColor(color);
+        d.setCornerRadius(ui.dp(1));
+        android.graphics.drawable.LayerDrawable layer = new android.graphics.drawable.LayerDrawable(
+                new android.graphics.drawable.Drawable[]{d});
+        layer.setLayerSize(0, ui.dp(widthDp), ui.dp(heightDp));
+        layer.setLayerGravity(0, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        return layer;
     }
 
     // ------------------------------------------------------------------
@@ -225,9 +264,6 @@ final class NativePageOverview extends NativePage {
      * </pre>
      */
     private View heroCard(JSONObject usage) {
-        LinearLayout card = ui.cardWithMargin();
-        card.setPadding(0, 0, 0, 0);
-
         long in = NativeData.num(usage, "input");
         long out = NativeData.num(usage, "output");
         long cacheRead = NativeData.num(usage, "cache_read");
@@ -246,9 +282,17 @@ final class NativePageOverview extends NativePage {
         long ttftMs = NativeData.num(usage, "ttft_ms");
         long decodeMs = NativeData.num(usage, "decode_ms");
         long decodeOut = NativeData.num(usage, "decode_out");
-
-        // token 总量 = 输入 + 输出 + 缓存读写（跟网页那个「Token 92M」一致）
         long total = in + out + cacheRead + cacheWrite;
+
+        // 设计稿：2×2 独立发光卡片，每张卡一个大数字 + 一句副文，卡片之间有间隙
+        if (ui.design) {
+            return designHero(in, out, cacheRead, cacheWrite, calls, errors, retried,
+                    canceled, upBytes, downBytes, cost, unpriced, unknownCalls, hit,
+                    timed, ttftMs, decodeMs, decodeOut, total);
+        }
+
+        LinearLayout card = ui.cardWithMargin();
+        card.setPadding(0, 0, 0, 0);
 
         // ---- 第一行：Token | 请求 ----
         LinearLayout row1 = ui.row();
@@ -346,6 +390,128 @@ final class NativePageOverview extends NativePage {
         speed.addView(note(ttft.toString(), M3.ON_SURFACE_VARIANT));
         card.addView(speed);
         return card;
+    }
+
+    /**
+     * 设计稿版汇总：2×2 独立发光卡片。
+     *
+     * <p>跟网页版不同：网页是一个大卡用分割线分节，设计稿是四张独立的
+     * 玻璃卡片，每张卡里「标签 + 大号无衬线数字 + 副文」三层，卡片之间
+     * 有间隙、靠青色描边和阴影分层。信息保留全量，只是拆成四张。
+     */
+    private View designHero(long in, long out, long cacheRead, long cacheWrite,
+                            long calls, long errors, long retried, long canceled,
+                            long upBytes, long downBytes, double cost, long unpriced,
+                            long unknownCalls, double hit, long timed, long ttftMs,
+                            long decodeMs, long decodeOut, long total) {
+        LinearLayout grid = ui.column();
+        grid.setPadding(ui.dp(14), ui.dp(4), ui.dp(14), ui.dp(4));
+
+        LinearLayout row1 = ui.row();
+        LinearLayout.LayoutParams r1lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        r1lp.bottomMargin = ui.dp(10);
+        row1.setLayoutParams(r1lp);
+
+        row1.addView(designCell("Token 用量", NativeData.tokens(total),
+                splitLine(in, out, cacheRead, cacheWrite)), designCellLp());
+
+        StringBuilder reqNotes = new StringBuilder();
+        if (errors == 0) {
+            reqNotes.append("没有失败");
+        } else {
+            reqNotes.append(errors).append(" 次失败 · 成功 ")
+                    .append(NativeData.percent(calls > 0 ? (calls - errors) * 100.0 / calls : 100));
+        }
+        if (retried > 0) {
+            reqNotes.append(" · ").append(retried).append(" 重试");
+        }
+        if (canceled > 0) {
+            reqNotes.append(" · ").append(canceled).append(" 取消");
+        }
+        if (upBytes + downBytes > 0) {
+            reqNotes.append(" · ↑").append(NativeData.bytes(upBytes))
+                    .append(" ↓").append(NativeData.bytes(downBytes));
+        }
+        row1.addView(designCell("请求数量", NativeData.count(calls), reqNotes.toString()),
+                designCellLp(true));
+        grid.addView(row1);
+
+        LinearLayout row2 = ui.row();
+        LinearLayout.LayoutParams r2lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        r2lp.bottomMargin = ui.dp(10);
+        row2.setLayoutParams(r2lp);
+        String costText = (unpriced > 0 ? "≈ " : "") + NativeData.cost(cost)
+                + (unpriced > 0 ? "+" : "");
+        row2.addView(designCell("费用", costText,
+                unpriced > 0 ? unpriced + " 次调用未计价" : "模型调用费用"), designCellLp());
+
+        String hitNote = unknownCalls > 0
+                ? unknownCalls + " 个未计入"
+                : "节省 " + NativeData.count(Math.round(hit * calls / 100.0)) + " 次请求";
+        row2.addView(designCell("缓存命中率", NativeData.percent(hit), hitNote),
+                designCellLp(true));
+        grid.addView(row2);
+
+        double speedVal = decodeMs > 0 ? decodeOut * 1000.0 / decodeMs : 0;
+        String speedText = speedVal > 0
+                ? (speedVal >= 100 ? String.valueOf(Math.round(speedVal))
+                : String.format(java.util.Locale.US, "%.0f", speedVal)) : "—";
+        StringBuilder ttft = new StringBuilder();
+        if (timed > 0) {
+            ttft.append("首字平均 ").append(NativeData.ms(ttftMs / Math.max(1, timed)))
+                    .append(" · ").append(timed).append(" 次计时");
+        } else {
+            ttft.append("没有计时数据");
+        }
+        LinearLayout speedCard = designCell("输出速度", speedText + " token/秒", ttft.toString());
+        LinearLayout.LayoutParams scp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        // 和上面第二行卡片拉开距离，别贴死
+        scp.topMargin = ui.dp(10);
+        speedCard.setLayoutParams(scp);
+        grid.addView(speedCard);
+        return grid;
+    }
+
+    /** 设计稿单张数据卡的布局参数。 */
+    private LinearLayout.LayoutParams designCellLp() {
+        return designCellLp(false);
+    }
+
+    /** 设计稿单张数据卡的布局参数，last=是否最后一张（右边留白）。 */
+    private LinearLayout.LayoutParams designCellLp(boolean last) {
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        if (!last) {
+            lp.rightMargin = ui.dp(10);
+        }
+        return lp;
+    }
+
+    /** 设计稿单张数据卡：标签 + 大号无衬线数字 + 副文，独立发光卡片。 */
+    private LinearLayout designCell(String title, String big, String sub) {
+        LinearLayout box = ui.card();
+        box.setPadding(ui.dp(18), ui.dp(16), ui.dp(18), ui.dp(16));
+        box.setGravity(Gravity.START);
+
+        TextView t = ui.text(title, 13, M3.ON_SURFACE_VARIANT, false);
+        t.setSingleLine(true);
+        box.addView(t);
+
+        TextView v = ui.text(big, 30, M3.ON_SURFACE, true);
+        v.setSingleLine(true);
+        v.setMaxLines(1);
+        LinearLayout.LayoutParams vlp = ui.matchWrap(6);
+        box.addView(v, vlp);
+
+        TextView s = ui.text(sub, 12, M3.ON_SURFACE_VARIANT, false);
+        s.setLineSpacing(ui.dp(2), 1f);
+        s.setSingleLine(true);
+        s.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        box.addView(s);
+        return box;
     }
 
     /** 「输入 1.1M · 输出 246K · 缓存 90M」那一行。 */
@@ -475,8 +641,11 @@ final class NativePageOverview extends NativePage {
         card.addView(head);
 
         if (series.length() == 0) {
-            TextView t = ui.text("这个周期还没有记录。", 12.5f, M3.ON_SURFACE_VARIANT, false);
+            // 空状态：照设计稿给一句友好的提示，而不是一行冷冰的「没有记录」
+            TextView t = ui.text("这个周期还没有记录，去跟 agent 聊两句就有了。",
+                    12.5f, M3.ON_SURFACE_VARIANT, false);
             t.setLayoutParams(ui.matchWrap(12));
+            t.setLineSpacing(ui.dp(2), 1f);
             card.addView(t);
             return card;
         }
@@ -500,9 +669,10 @@ final class NativePageOverview extends NativePage {
             }
         }
 
-        Ui.BarChart chart = ui.barChart();
+        // 设计稿那张：平滑曲线 + 渐变面积填充，比柱状图更贴近「开发者监控台」
+        Ui.AreaChart chart = ui.areaChart();
         chart.setLayoutParams(ui.matchWrap(12));
-        chart.setData(values, labels, n <= 32);
+        chart.setData(values, labels);
         card.addView(chart);
 
         LinearLayout foot = ui.row();

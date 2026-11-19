@@ -118,7 +118,7 @@ final class NativePageUsage extends NativePage {
             });
             return;
         }
-        MagpieApi.Result req = MagpieApi.requests(host, p, 40);
+        MagpieApi.Result req = MagpieApi.requests(host, p, 5);
         JSONObject u = usage.json();
         JSONObject r = req.ok() ? req.json() : null;
 
@@ -358,7 +358,7 @@ final class NativePageUsage extends NativePage {
         }
 
         int shown = 0;
-        for (int i = 0; i < rows.length() && shown < 25; i++) {
+        for (int i = 0; i < rows.length() && shown < 5; i++) {
             JSONObject r = NativeData.at(rows, i);
             if (r == null) {
                 continue;

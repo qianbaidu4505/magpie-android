@@ -111,62 +111,6 @@
             android:layout_marginTop="8dp"
             android:text="@string/update_rollback" />
 
-        <!-- 更新源：原来在壳设置里，跟「检查 magpie 更新」分在两页很别扭，
-             挪到这里一起。 -->
-        <LinearLayout
-            android:id="@+id/card_feed"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:orientation="vertical">
-
-            <TextView
-                android:id="@+id/label_feed"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/settings_update_feed"
-                android:textSize="15sp"
-                android:textStyle="bold" />
-
-            <EditText
-                android:id="@+id/feed"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:hint="@string/settings_update_feed_hint"
-                android:inputType="textUri"
-                android:textSize="13sp" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:text="@string/settings_stable_channel"
-                android:textSize="15sp"
-                android:textStyle="bold" />
-
-            <Switch
-                android:id="@+id/stable_channel"
-                android:layout_width="match_parent"
-                android:layout_height="52dp"
-                android:text="@string/settings_stable_channel"
-                android:textSize="15sp" />
-
-            <TextView
-                android:id="@+id/hint_stable_channel"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/settings_stable_channel_hint"
-                android:textSize="12sp" />
-
-            <Button
-                android:id="@+id/save_feed"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:text="@string/settings_save_feed" />
-        </LinearLayout>
-
         <TextView
             android:id="@+id/label_notes"
             android:layout_width="match_parent"

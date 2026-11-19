@@ -44,11 +44,11 @@
     <string name="settings_units_hint">用量、请求数这类大数字用哪种缩写</string>
     <string name="settings_units_en">英文（K / M / B）</string>
     <string name="settings_units_zh">中文（万 / 亿）</string>
-    <string name="settings_monet">莫奈取色</string>
-    <string name="settings_monet_hint">从系统壁纸里取一种强调色（需要 Android 12 及以上）</string>
-    <string name="settings_monet_unavailable">这个系统版本不支持动态取色</string>
-    <string name="settings_seed">主题色</string>
-    <string name="settings_seed_hint">Material 3 · TonalSpot · SPEC 2025：从八种种子色生成整套配色</string>
+    <string name="settings_appearance">外观</string>
+    <string name="settings_appearance_hint">深色 / 浅色 / 跟随系统，改完立刻生效</string>
+    <string name="settings_theme_system">跟随系统</string>
+    <string name="settings_theme_dark">深色</string>
+    <string name="settings_theme_light">浅色</string>
 
     <string name="update_title">更新</string>
     <string name="update_current">当前版本</string>
@@ -119,6 +119,23 @@
     <string name="settings_open_background_guide">打开后台运行引导</string>
     <string name="settings_stable_channel">稳定版更新渠道</string>
     <string name="settings_stable_channel_hint">开启：只推送发布满三天后的稳定版；关闭：每个版本都推送（含紧急修复）。只影响 magpie 内核的检查更新，自定义更新源不受影响。</string>
+
+    <!-- 更新设置（独立入口） -->
+    <string name="update_settings_title">更新设置</string>
+    <string name="update_settings_core_channel">magpie 内核更新渠道</string>
+    <string name="update_settings_core_stable">稳定版</string>
+    <string name="update_settings_core_test">测试版</string>
+    <string name="update_settings_core_hint">稳定版只推送发布满三天的版本；测试版每个版本都推（含紧急修复）。</string>
+    <string name="update_settings_shell_channel">壳软件更新渠道</string>
+    <string name="update_settings_shell_stable">稳定版</string>
+    <string name="update_settings_shell_test">测试版</string>
+    <string name="update_settings_shell_hint">稳定版只推送正式 Release；测试版包含预发布（prerelease）版本。</string>
+    <string name="update_settings_core_feed">magpie 内核更新源</string>
+    <string name="update_settings_core_feed_hint">留空用默认更新源；自定义源优先级最高。</string>
+    <string name="update_settings_shell_mirror">壳软件下载镜像</string>
+    <string name="update_settings_shell_mirror_hint">国内直连 GitHub 困难时选一个镜像前缀。</string>
+    <string name="update_settings_save_restart">保存并重启</string>
+    <string name="update_settings_saved">已保存，正在重启 App…</string>
 
     <!-- 壳（APK）自更新：方案一 App 内下载 + 系统安装器，镜像选择，蓝奏云入口 -->
     <string name="shell_update_available_download">发现新版本 %1$s（下载源：%2$s），点「下载并安装」在 App 内直接更新。</string>

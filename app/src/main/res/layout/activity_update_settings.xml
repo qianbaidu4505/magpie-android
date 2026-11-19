@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 更新设置页：magpie 内核 / 壳软件 各自稳定·测试渠道 + 更新源，保存后杀进程重启。 -->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/update_settings_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true"
+    android:scrollbars="none">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="16dp"
+        android:paddingTop="6dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="24dp">
+
+        <TextView
+            android:id="@+id/update_settings_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:layout_marginBottom="14dp"
+            android:text="@string/update_settings_title"
+            android:textSize="26sp"
+            android:textStyle="bold" />
+
+        <!-- magpie 内核更新渠道 -->
+        <LinearLayout
+            android:id="@+id/card_core_channel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="10dp"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:id="@+id/label_core_channel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/update_settings_core_channel"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/hint_core_channel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="@string/update_settings_core_hint"
+                android:textSize="12sp" />
+
+            <RadioGroup
+                android:id="@+id/core_channel_group"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal">
+
+                <RadioButton
+                    android:id="@+id/core_stable"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/update_settings_core_stable"
+                    android:textSize="14sp" />
+
+                <RadioButton
+                    android:id="@+id/core_test"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/update_settings_core_test"
+                    android:textSize="14sp" />
+            </RadioGroup>
+        </LinearLayout>
+
+        <!-- 壳软件更新渠道 -->
+        <LinearLayout
+            android:id="@+id/card_shell_channel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="10dp"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:id="@+id/label_shell_channel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/update_settings_shell_channel"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/hint_shell_channel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="@string/update_settings_shell_hint"
+                android:textSize="12sp" />
+
+            <RadioGroup
+                android:id="@+id/shell_channel_group"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal">
+
+                <RadioButton
+                    android:id="@+id/shell_stable"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/update_settings_shell_stable"
+                    android:textSize="14sp" />
+
+                <RadioButton
+                    android:id="@+id/shell_test"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/update_settings_shell_test"
+                    android:textSize="14sp" />
+            </RadioGroup>
+        </LinearLayout>
+
+        <!-- magpie 内核更新源 -->
+        <LinearLayout
+            android:id="@+id/card_core_feed"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="10dp"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:id="@+id/label_core_feed"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/update_settings_core_feed"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/hint_core_feed"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="@string/update_settings_core_feed_hint"
+                android:textSize="12sp" />
+
+            <EditText
+                android:id="@+id/core_feed"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginTop="10dp"
+                android:gravity="center_vertical"
+                android:hint="@string/update_settings_core_feed_hint"
+                android:inputType="textUri"
+                android:maxLength="300"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <!-- 壳软件下载镜像 -->
+        <LinearLayout
+            android:id="@+id/card_shell_mirror"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="10dp"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:id="@+id/label_shell_mirror"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/update_settings_shell_mirror"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/hint_shell_mirror"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="@string/update_settings_shell_mirror_hint"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/shell_mirror_value"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginTop="10dp"
+                android:gravity="center_vertical"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/shell_mirror_add"
+                android:layout_width="wrap_content"
+                android:layout_height="44dp"
+                android:layout_marginTop="6dp"
+                android:gravity="center_vertical"
+                android:text="@string/settings_shell_add_mirror"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <!-- 保存并重启 -->
+        <Button
+            android:id="@+id/update_settings_save"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginTop="6dp"
+            android:text="@string/update_settings_save_restart"
+            android:textSize="16sp" />
+    </LinearLayout>
+</ScrollView>

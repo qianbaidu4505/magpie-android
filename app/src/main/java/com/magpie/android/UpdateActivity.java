@@ -78,17 +78,6 @@ public class UpdateActivity extends Activity {
         openPage = findViewById(R.id.open_page);
         rollback = findViewById(R.id.rollback);
 
-        // ---- 更新源 + 稳定渠道（从壳设置挪过来的）----
-        final EditText feed = findViewById(R.id.feed);
-        final Switch stable = findViewById(R.id.stable_channel);
-        feed.setText(Prefs.updateFeed(this));
-        stable.setChecked(Prefs.stableChannel(this));
-        findViewById(R.id.save_feed).setOnClickListener(v -> {
-            Prefs.setUpdateFeed(this, feed.getText().toString());
-            Prefs.setStableChannel(this, stable.isChecked());
-            Toast.makeText(this, R.string.settings_feed_saved, Toast.LENGTH_SHORT).show();
-        });
-
         check.setOnClickListener(v -> checkForUpdates(true));
         updateNow.setOnClickListener(v -> installNow());
         openPage.setOnClickListener(v -> {

@@ -28,6 +28,8 @@ public final class Prefs {
     public static final String UPDATE_FEED = "update_feed";
     /** 更新渠道：true=稳定版（?channel=stable），false=每个版本。 */
     public static final String STABLE_CHANNEL = "stable_channel";
+    /** 壳（APK）更新渠道：true=稳定版，false=测试版（含 prerelease）。 */
+    public static final String SHELL_STABLE_CHANNEL = "shell_stable_channel";
     /** 后台多久后释放 WebView（分钟）；0 = 从不。 */
     public static final String WEB_RELEASE_MINUTES = "web_release_minutes";
     /** 「释放时间已按新版默认值覆盖过」的标记，只迁移一次。 */
@@ -54,6 +56,17 @@ public final class Prefs {
     public static final String SHELL_CUSTOM_MIRRORS = "shell_custom_mirrors";
     /** 数字单位：0=英文 K/M/B，1=中文 万/亿。 */
     public static final String UNIT_MODE = "unit_mode";
+    /** 主题模式：0=跟随系统，1=深色，2=浅色。 */
+    public static final String THEME_MODE = "theme_mode";
+
+    public static int themeMode(Context ctx) {
+        int m = sp(ctx).getInt(THEME_MODE, 0);
+        return m < 0 || m > 2 ? 0 : m;
+    }
+
+    public static void setThemeMode(Context ctx, int m) {
+        sp(ctx).edit().putInt(THEME_MODE, m < 0 || m > 2 ? 0 : m).apply();
+    }
 
     /** 上次发「设为无限制」提醒的时间（毫秒），控制提醒频率。 */
     public static final String FREEZE_NUDGE_AT = "freeze_nudge_at";
@@ -193,6 +206,15 @@ public final class Prefs {
 
     public static void setStableChannel(Context ctx, boolean stable) {
         sp(ctx).edit().putBoolean(STABLE_CHANNEL, stable).apply();
+    }
+
+    /** 壳（APK）更新是否走稳定版；默认稳定。 */
+    public static boolean shellStableChannel(Context ctx) {
+        return sp(ctx).getBoolean(SHELL_STABLE_CHANNEL, true);
+    }
+
+    public static void setShellStableChannel(Context ctx, boolean stable) {
+        sp(ctx).edit().putBoolean(SHELL_STABLE_CHANNEL, stable).apply();
     }
 
     public static boolean autostart(Context ctx) {

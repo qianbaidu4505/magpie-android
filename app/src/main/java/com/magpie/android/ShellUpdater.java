@@ -111,7 +111,7 @@ public final class ShellUpdater {
         new Thread(() -> {
             Result result;
             try {
-                result = fetch();
+                result = fetch(ctx);
             } catch (IOException e) {
                 Log.w(TAG, "检查壳更新失败: " + e);
                 result = new Result("", "", "", e.getMessage());
@@ -121,8 +121,8 @@ public final class ShellUpdater {
         }, "magpie-shell-update").start();
     }
 
-    private static Result fetch() throws IOException {
-        Result r = fetchApi();
+    private static Result fetch(Context ctx) throws IOException {
+        Result r = fetchApi(ctx);
         if (r == null) {
             r = fetchAtom();
         }
@@ -135,9 +135,14 @@ public final class ShellUpdater {
     /**
      * 第一级：GitHub Releases API。匿名访问可能 403，失败返回 null 交给
      * atom 兜底，不在这里报错。
+     *
+     * <p>稳定版只拿 {@code /releases/latest}（不含 prerelease）；测试版拿
+     * {@code /releases?per_page=1}（列表第一项，含 prerelease）。
      */
-    private static Result fetchApi() {
-        String url = "https://api.github.com/repos/" + OWNER + "/" + REPO + "/releases/latest";
+    private static Result fetchApi(Context ctx) {
+        String url = Prefs.shellStableChannel(ctx)
+                ? "https://api.github.com/repos/" + OWNER + "/" + REPO + "/releases/latest"
+                : "https://api.github.com/repos/" + OWNER + "/" + REPO + "/releases?per_page=1";
         HttpURLConnection c = null;
         try {
             c = (HttpURLConnection) new URL(url).openConnection();
@@ -153,7 +158,20 @@ public final class ShellUpdater {
                 return null; // 403 等，交给 atom
             }
             String body = readAll(c.getInputStream());
-            JSONObject j = new JSONObject(body);
+            JSONObject j;
+            if (!Prefs.shellStableChannel(ctx)) {
+                // 测试版：返回的是数组，取第一个
+                JSONArray arr = new JSONArray(body);
+                if (arr.length() == 0) {
+                    return new Result("", "", "", "仓库还没有 Release");
+                }
+                j = arr.optJSONObject(0);
+                if (j == null) {
+                    return null;
+                }
+            } else {
+                j = new JSONObject(body);
+            }
             String tag = j.optString("tag_name", "");
             String page = j.optString("html_url", releasesPage());
             String dl = "";

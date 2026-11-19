@@ -348,7 +348,7 @@ final class NativePageAccounts extends NativePage {
     /** 一家供应商的模型块：标题行（显示名 + provider id + 全收写法）+ 模型行。 */
     private View providerBlock(String pid, String pname, JSONArray models) {
         LinearLayout card = ui.column();
-        card.setBackground(ui.roundStroke(ui.col(M3.SURFACE_CONTAINER), 16,
+        ui.glowCard(card, ui.glowStroke(ui.col(M3.SURFACE_CONTAINER), 16,
                 ui.col(M3.OUTLINE_VARIANT), 1));
         int pad = ui.dp(12);
         card.setPadding(pad, pad, pad, pad);
@@ -521,9 +521,12 @@ final class NativePageAccounts extends NativePage {
 
         // ---- 供应商标题行（一级卡片，带合计）----
         LinearLayout header = ui.row();
-        GradientDrawable hbg = ui.roundStroke(ui.col(M3.SURFACE_CONTAINER_LOW), 18,
+        GradientDrawable hbg = ui.glowStroke(ui.col(M3.SURFACE_CONTAINER_LOW), 18,
                 ui.col(M3.OUTLINE_VARIANT), 1);
         ui.clickable(header, hbg);
+        if (ui.design) {
+            header.setElevation(ui.dp(6));
+        }
         header.setPadding(ui.dp(14), ui.dp(13), ui.dp(12), ui.dp(13));
         LinearLayout.LayoutParams hlp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -636,9 +639,9 @@ final class NativePageAccounts extends NativePage {
 
         LinearLayout card = ui.column();
         // 二级卡片：左边缩进更多，右边留短一点，视觉上是「台阶」
-        GradientDrawable bg = ui.roundStroke(ui.col(M3.SURFACE_CONTAINER), 14,
+        GradientDrawable bg = ui.glowStroke(ui.col(M3.SURFACE_CONTAINER), 14,
                 ui.col(M3.OUTLINE_VARIANT), 1);
-        card.setBackground(bg);
+        ui.glowCard(card, bg);
         card.setPadding(ui.dp(12), ui.dp(10), ui.dp(10), ui.dp(10));
         LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);

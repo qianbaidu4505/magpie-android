@@ -211,34 +211,9 @@
                 android:text="@string/settings_open_background_guide" />
         </LinearLayout>
 
+        <!-- 外观：深色 / 浅色 / 跟随系统 -->
         <LinearLayout
             android:id="@+id/card_appearance"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:orientation="vertical"
-            android:paddingStart="16dp"
-            android:paddingTop="8dp"
-            android:paddingEnd="16dp"
-            android:paddingBottom="14dp">
-
-            <Switch
-                android:id="@+id/monet"
-                android:layout_width="match_parent"
-                android:layout_height="52dp"
-                android:text="@string/settings_monet"
-                android:textSize="15sp" />
-
-            <TextView
-                android:id="@+id/monet_hint"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/settings_monet_hint"
-                android:textSize="12sp" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/card_seed"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
@@ -246,30 +221,54 @@
             android:padding="16dp">
 
             <TextView
-                android:id="@+id/label_seed"
+                android:id="@+id/label_appearance"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/settings_seed"
+                android:text="@string/settings_appearance"
                 android:textSize="15sp"
                 android:textStyle="bold" />
 
             <TextView
-                android:id="@+id/hint_seed"
+                android:id="@+id/hint_appearance"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="2dp"
-                android:text="@string/settings_seed_hint"
+                android:text="@string/settings_appearance_hint"
                 android:textSize="12sp" />
 
-            <LinearLayout
-                android:id="@+id/colors_seed"
+            <RadioGroup
+                android:id="@+id/theme_group"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:orientation="horizontal" />
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal">
+
+                <RadioButton
+                    android:id="@+id/theme_system"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/settings_theme_system"
+                    android:textSize="13sp" />
+
+                <RadioButton
+                    android:id="@+id/theme_dark"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/settings_theme_dark"
+                    android:textSize="13sp" />
+
+                <RadioButton
+                    android:id="@+id/theme_light"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/settings_theme_light"
+                    android:textSize="13sp" />
+            </RadioGroup>
         </LinearLayout>
 
-        <!-- 数字单位：大数字用英文 K/M/B 还是中文 万/亿 -->
         <LinearLayout
             android:id="@+id/card_units"
             android:layout_width="match_parent"
@@ -353,39 +352,6 @@
                 android:layout_height="wrap_content"
                 android:text="@string/settings_shell_auto_check_hint"
                 android:textSize="12sp" />
-
-            <TextView
-                android:id="@+id/label_shell_mirror"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:text="@string/settings_shell_mirror"
-                android:textSize="15sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/shell_mirror_value"
-                android:layout_width="match_parent"
-                android:layout_height="52dp"
-                android:layout_marginTop="6dp"
-                android:gravity="center_vertical"
-                android:paddingStart="14dp"
-                android:paddingEnd="14dp"
-                android:textSize="14sp" />
-
-            <TextView
-                android:id="@+id/hint_shell_mirror"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/settings_shell_mirror_hint"
-                android:textSize="12sp" />
-
-            <Button
-                android:id="@+id/shell_add_mirror"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:layout_marginTop="10dp"
-                android:text="@string/settings_shell_add_mirror" />
 
             <Button
                 android:id="@+id/shell_lanzou"
