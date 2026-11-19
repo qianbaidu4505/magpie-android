@@ -117,8 +117,17 @@ echo "→ aapt2 link"
 echo "→ javac"
 BOOTCP="$ANDROID_JAR"
 [ -n "$LAMBDA_STUBS" ] && BOOTCP="$ANDROID_JAR:$LAMBDA_STUBS"
+# 第三方 jar（Shizuku API）：只在 classpath 里，不打进 bootclasspath
+LIBS_CP=""
+if [ -d app/libs ]; then
+    for j in app/libs/*.jar; do
+        [ -f "$j" ] || continue
+        LIBS_CP="$LIBS_CP:$j"
+    done
+fi
 javac -nowarn -Xlint:-options -source 8 -target 8 \
     -bootclasspath "$BOOTCP" \
+    -classpath "${LIBS_CP#:}" \
     -d "$BUILD/classes" \
     "$BUILD/gen/$(echo "$APP_ID" | tr '.' '/')/R.java" \
     app/src/main/java/$(echo "$APP_ID" | tr '.' '/')/*.java
@@ -128,7 +137,8 @@ echo "→ d8"
 "$JAVA" -cp "$BT/lib/d8.jar" com.android.tools.r8.D8 \
     --release --min-api 24 --lib "$ANDROID_JAR" \
     --output "$BUILD/dex" \
-    $(find "$BUILD/classes" -name '*.class')
+    $(find "$BUILD/classes" -name '*.class') \
+    $(ls app/libs/*.jar 2>/dev/null)
 
 # --- 组装 -----------------------------------------------------------
 

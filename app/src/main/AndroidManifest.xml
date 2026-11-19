@@ -17,6 +17,10 @@
     <!-- 壳自更新（App 内下载 APK 后拉起安装器）需要请求安装未知应用（Android 8+） -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- Shizuku：用户用 Shizuku/Sui 授权后，壳可以以 shell/root 身份执行命令
+         （比如往 MIUI 省电策略数据库写「无限制」），不需要 App 本身有 root。 -->
+    <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
+
     <application
         android:name=".App"
         android:allowBackup="false"
@@ -81,6 +85,16 @@
             android:authorities="com.magpie.android.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true" />
+
+        <!-- Shizuku 的 binder 接收器。Shizuku App 通过它把服务 binder 交给本 App；
+             必须在 manifest 里声明，否则拿不到 binder、无法请求授权。 -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="com.magpie.android.shizuku"
+            android:enabled="true"
+            android:exported="true"
+            android:multiprocess="false"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
 
     </application>
 </manifest>

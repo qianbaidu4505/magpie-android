@@ -35,6 +35,15 @@ public final class ShellUpdater {
     /** 开源仓库名。 */
     private static final String REPO = "magpie-android";
 
+    /** 给「上报问题」用的仓库坐标。 */
+    static String owner() {
+        return OWNER;
+    }
+
+    static String repo() {
+        return REPO;
+    }
+
     /** 内置镜像前缀（空串 = GitHub 官方直连）。用户可在设置页手动添加更多。 */
     public static final String[] MIRROR_PREFIXES = {
             "",
