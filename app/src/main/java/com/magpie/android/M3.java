@@ -47,22 +47,24 @@ final class M3 {
     static final int INVERSE_ON_SURFACE = 30;
     static final int INVERSE_PRIMARY = 31;
     static final int SCRIM = 32;
-    static final int COUNT = 33;
+    /** 余量预警黄（<20%）；余量充足用 TERTIARY 绿，耗尽用 ERROR 红。 */
+    static final int QUOTA_WARN = 33;
+    static final int COUNT = 34;
 
-    static final String[] ROLE_NAMES = {"primary", "onPrimary", "primaryContainer", "onPrimaryContainer", "secondary", "onSecondary", "secondaryContainer", "onSecondaryContainer", "tertiary", "onTertiary", "tertiaryContainer", "onTertiaryContainer", "error", "onError", "errorContainer", "onErrorContainer", "surface", "onSurface", "surfaceVariant", "onSurfaceVariant", "outline", "outlineVariant", "surfaceDim", "surfaceBright", "surfaceContainerLowest", "surfaceContainerLow", "surfaceContainer", "surfaceContainerHigh", "surfaceContainerHighest", "inverseSurface", "inverseOnSurface", "inversePrimary", "scrim"};
+    static final String[] ROLE_NAMES = {"primary", "onPrimary", "primaryContainer", "onPrimaryContainer", "secondary", "onSecondary", "secondaryContainer", "onSecondaryContainer", "tertiary", "onTertiary", "tertiaryContainer", "onTertiaryContainer", "error", "onError", "errorContainer", "onErrorContainer", "surface", "onSurface", "surfaceVariant", "onSurfaceVariant", "outline", "outlineVariant", "surfaceDim", "surfaceBright", "surfaceContainerLowest", "surfaceContainerLow", "surfaceContainer", "surfaceContainerHigh", "surfaceContainerHighest", "inverseSurface", "inverseOnSurface", "inversePrimary", "scrim", "quotaWarn"};
 
     /** 种子色：设为「跟随系统」以外的风格。最后一个是设计稿配色。 */
     static final String[] SEED_NAMES = {"青绿·设计稿"};
-    static final int[] SEEDS = {0xFF2DD4BF};
+    static final int[] SEEDS = {0xFF3498DB};
 
     static final int[][] LIGHT = {
         // 青绿·设计稿（浅色·柔化）
-        {0xFF0E938A, 0xFF003731, 0xFFB8FFF4, 0xFF003731, 0xFF4A5D62, 0xFFF0F4F6, 0xFFD6DEE2, 0xFF3A4A4F, 0xFF3A6478, 0xFFF0F4F6, 0xFFB7E3FF, 0xFF26536A, 0xFFA83836, 0xFFF0F4F6, 0xFFFA746F, 0xFF6E0A12, 0xFFE6ECEF, 0xFF1B262B, 0xFFD2DBDF, 0xFF5A6B72, 0xFF8B9BA2, 0xFFD6DEE2, 0xFFDCE3E6, 0xFFF0F4F6, 0xFFE6ECEF, 0xFFE6ECEF, 0xFFE6ECEF, 0xFFEBF0F2, 0xFFDCE3E6, 0xFF1B262B, 0xFFE6ECEF, 0xFF7CD5CB, 0xFF000000},
+        {0xFF3498DB, 0xFFFFFFFF, 0xFFD6EAF8, 0xFF1B4F72, 0xFF5D6D7E, 0xFFFFFFFF, 0xFFD5DBDB, 0xFF2E3B47, 0xFF27AE60, 0xFFFFFFFF, 0xFFD5F5E3, 0xFF1E8449, 0xFFE74C3C, 0xFFFFFFFF, 0xFFFDEDEC, 0xFF943126, 0xFFF4F5F7, 0xFF222222, 0xFFDDE1E7, 0xFF444444, 0xFFAEB6BF, 0xFFDDE1E7, 0xFFE1E4E8, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFF7F8FA, 0xFFEEF0F3, 0xFFE7EAEE, 0xFF222222, 0xFFF4F5F7, 0xFF85C1E9, 0xFF000000, 0xFFF39C12},
     };
 
     static final int[][] DARK = {
         // 青绿·设计稿（深色）
-        {0xFF2EE6D0, 0xFF003731, 0xFF00504A, 0xFFB8FFF4, 0xFF9DB4B8, 0xFF123544, 0xFF254C5C, 0xFFC4E4F2, 0xFFA5C9D8, 0xFF123544, 0xFF254C5C, 0xFFC4E4F2, 0xFFFA746F, 0xFF490006, 0xFF871F21, 0xFFFF9993, 0xFF0D1F24, 0xFFFFFFFF, 0xFF122830, 0xFF9DB4B8, 0xFF64748B, 0x662DD4BF, 0xFF0B1A1E, 0xFF1E363C, 0xFF0B1A1E, 0xFF122830, 0xFF162E36, 0xFF1A343C, 0xFF1E3A42, 0xFFFFFFFF, 0xFF0D1F24, 0xFF14B8A6, 0xFF000000},
+        {0xFF5DADE2, 0xFF0B141B, 0xFF1B3A52, 0xFFD6EAF8, 0xFF85929E, 0xFF0B141B, 0xFF2C343C, 0xFFD5DBDB, 0xFF2ECC71, 0xFF0B141B, 0xFF1D4D34, 0xFFD5F5E3, 0xFFE74C3C, 0xFF0B141B, 0xFF4A2327, 0xFFFDEDEC, 0xFF17191C, 0xFFEAECEE, 0xFF2A2E33, 0xFFA6AFB8, 0xFF5D6670, 0xFF3A3F45, 0xFF101214, 0xFF22262B, 0xFF101214, 0xFF1B1E22, 0xFF202329, 0xFF262A30, 0xFF2C3138, 0xFFEAECEE, 0xFF17191C, 0xFF5DADE2, 0xFF000000, 0xFFF5B041},
     };
 
     private M3() {
@@ -167,6 +169,7 @@ final class M3 {
         out[ERROR_CONTAINER] = sys(ctx, (dk ? "system_error_30" : "system_error_90"));
         out[ON_ERROR_CONTAINER] = sys(ctx, (dk ? "system_error_90" : "system_error_10"));
         out[SCRIM] = 0xFF000000;
+        out[QUOTA_WARN] = dk ? 0xFFF5B041 : 0xFFF39C12;
         fill[0]++;
         return out;
     }

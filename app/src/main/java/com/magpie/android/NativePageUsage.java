@@ -385,10 +385,14 @@ final class NativePageUsage extends NativePage {
         String provider = NativeData.str(r, "providerName",
                 NativeData.str(r, "provider", ""));
         String agent = NativeData.str(r, "agentName", NativeData.str(r, "agent", ""));
+
         int status = NativeData.num(r, "status");
         boolean failed = status >= 400 || !NativeData.str(r, "err", "").isEmpty();
         long ms = (long) NativeData.dec(r, "ms");
         long ttft = (long) NativeData.dec(r, "ttft_ms");
+        if (ttft <= 0) {
+            ttft = (long) NativeData.dec(r, "ttft");
+        }
         long tokens = NativeData.num(r, "in") + NativeData.num(r, "out");
         double cost = NativeData.dec(r, "cost");
         String time = NativeData.str(r, "t", "");
@@ -408,7 +412,21 @@ final class NativePageUsage extends NativePage {
             head.addView(ui.pill(status > 0 ? String.valueOf(status) : "失败",
                     M3.ERROR_CONTAINER, M3.ON_ERROR_CONTAINER));
         } else {
-            head.addView(ui.text(NativeData.ms(ms), 11, M3.ON_SURFACE_VARIANT, false));
+            // 首字 + 总耗时并列在第一行右侧，一眼可读
+            StringBuilder times = new StringBuilder();
+            if (ttft > 0) {
+                times.append("首字 ").append(NativeData.ms(ttft));
+            }
+            if (ms > 0) {
+                if (times.length() > 0) {
+                    times.append(" · ");
+                }
+                times.append(NativeData.ms(ms));
+            }
+            if (times.length() > 0) {
+                head.addView(ui.text(times.toString(), 11,
+                        M3.ON_SURFACE_VARIANT, false));
+            }
         }
         box.addView(head);
 
@@ -433,12 +451,6 @@ final class NativePageUsage extends NativePage {
                 sub.append(" · ");
             }
             sub.append(NativeData.cost(cost));
-        }
-        if (ttft > 0) {
-            if (sub.length() > 0) {
-                sub.append(" · ");
-            }
-            sub.append("首字 ").append(NativeData.ms(ttft));
         }
         String err = NativeData.str(r, "err", "");
         if (!err.isEmpty()) {

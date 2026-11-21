@@ -44,8 +44,38 @@ final class NativePageAccounts extends NativePage {
 
     private final Map<String, String> offProviders = new LinkedHashMap<>();
 
+    /** 最近一次渲染时的全部 provider key 和账号 key，用于「再点一次 tab 全部收起」。 */
+    private final List<String> lastProviderKeys = new ArrayList<>();
+    private final List<String> lastAccountKeys = new ArrayList<>();
+
     NativePageAccounts(NativeHome host) {
         super(host);
+    }
+
+    /**
+     * 再点一次底栏「账号」：收起所有展开的供应商/账号卡片，并回到页面顶部。
+     */
+    @Override
+    void collapseAndScrollTop() {
+        boolean changed = false;
+        for (String k : lastProviderKeys) {
+            if (Collapse.expanded(host, k, false)) {
+                Collapse.setExpanded(host, k, false);
+                changed = true;
+            }
+        }
+        for (String k : lastAccountKeys) {
+            if (Collapse.expanded(host, k, false)) {
+                Collapse.setExpanded(host, k, false);
+                changed = true;
+            }
+        }
+        if (changed) {
+            // 收起后重画一次，保持回顶部的意图（refresh 里已经会重建列表）
+            refresh(true);
+        } else {
+            scroll.post(() -> scroll.smoothScrollTo(0, 0));
+        }
     }
 
     @Override
@@ -179,6 +209,16 @@ final class NativePageAccounts extends NativePage {
 
         for (Map.Entry<String, List<JSONObject>> e : byProvider.entrySet()) {
             content.addView(providerGroup(e.getKey(), e.getValue()));
+        }
+
+        // 记下这批 key，供「再点一次 tab 收起全部」用
+        lastProviderKeys.clear();
+        lastAccountKeys.clear();
+        for (Map.Entry<String, List<JSONObject>> e : byProvider.entrySet()) {
+            lastProviderKeys.add("prov:" + e.getKey());
+            for (JSONObject q : e.getValue()) {
+                lastAccountKeys.add(accountKey(q));
+            }
         }
 
         TextView foot = ui.text("额度由各家供应商接口读取，可能滞后几分钟；"
@@ -655,6 +695,12 @@ final class NativePageAccounts extends NativePage {
         String kind = NativeData.str(q, "kind", "");
         String title = !alias.isEmpty() ? alias : !user.isEmpty() ? user
                 : !seat.isEmpty() ? seat : NativeData.pretty(providerId);
+        boolean providerOff = offProviders.containsKey(providerId);
+
+        // 关闭的账号整体置灰：卡片降不透明度，名字用次要色
+        if (providerOff || !accountIsOn(q)) {
+            card.setAlpha(0.45f);
+        }
 
         // ---- 标题行：箭头 + 名字 + 摘要 + 刷新 ----
         LinearLayout head = ui.row();
@@ -669,7 +715,8 @@ final class NativePageAccounts extends NativePage {
         tlp.leftMargin = ui.dp(2);
         head.addView(titleBox, tlp);
 
-        TextView name = ui.text(title, 13.5f, M3.ON_SURFACE, true);
+        TextView name = ui.text(title, 13.5f,
+                providerOff ? M3.ON_SURFACE_VARIANT : M3.ON_SURFACE, true);
         name.setSingleLine(true);
         name.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
         titleBox.addView(name);
@@ -748,11 +795,39 @@ final class NativePageAccounts extends NativePage {
             }
             sb.append(NativeData.percent(worst)).append(" 剩余");
         }
+        // 已用/总额：额度窗口给了 amount/limit 就直接展示
+        String usedTotal = usedTotalLine(windows);
+        if (!usedTotal.isEmpty()) {
+            if (sb.length() > 0) {
+                sb.append(" · ");
+            }
+            sb.append("已用 ").append(usedTotal);
+        }
         if (sb.length() == 0) {
             String plan = Zh.of(NativeData.str(q, "plan", ""));
             sb.append(plan.isEmpty() ? "点开看详情" : plan);
         }
         return sb.toString();
+    }
+
+    /** 已用/总额：取第一个给 amount/limit 的额度窗口，拼 "x / y 单位"。 */
+    private String usedTotalLine(JSONArray windows) {
+        for (int i = 0; i < windows.length(); i++) {
+            JSONObject w = NativeData.at(windows, i);
+            if (w == null || NativeData.flag(w, "unlimited")) {
+                continue;
+            }
+            double amount = NativeData.dec(w, "amount");
+            double limit = NativeData.dec(w, "limit");
+            if (limit <= 0) {
+                continue;
+            }
+            String unit = Zh.of(NativeData.str(w, "unit", ""));
+            boolean showUnit = !unit.isEmpty();
+            return shortCount(Math.max(0, amount)) + " / " + shortCount(limit)
+                    + (showUnit ? " " + unit : "");
+        }
+        return "";
     }
 
     private void buildDetail(JSONObject q, LinearLayout body) {

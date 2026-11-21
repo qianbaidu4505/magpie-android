@@ -399,7 +399,7 @@ public class NativeHome extends Activity {
                 999, ui.col(M3.OUTLINE_VARIANT), 1));
         gwPill.setPadding(ui.dp(10), ui.dp(5), ui.dp(10), ui.dp(5));
         gwPill.setGravity(Gravity.CENTER);
-        gwPill.setOnClickListener(v -> copyGateway());
+        gwPill.setOnClickListener(v -> showGatewayDialog());
         gwPill.setOnLongClickListener(v -> {
             openWebUi();
             return true;
@@ -510,7 +510,14 @@ public class NativeHome extends Activity {
             tlp.topMargin = ui.dp(3);
             item.addView(t, tlp);
 
-            item.setOnClickListener(v -> selectTab(index, true));
+            item.setOnClickListener(v -> {
+                // 已在这个 tab 上时再点：收起展开的卡片并回到顶部初始位置
+                if (index == tab) {
+                    currentPage().collapseAndScrollTop();
+                    return;
+                }
+                selectTab(index, true);
+            });
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                     0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
             lp.setMargins(ui.dp(2), 0, ui.dp(2), 0);
@@ -998,6 +1005,42 @@ public class NativeHome extends Activity {
         toast("已复制 " + url);
     }
 
+    /**
+     * 点顶栏地址胶囊弹出的网关信息卡：本机地址 + 密钥掩码，
+     * 三个按钮：复制密钥 / 关闭 / 复制网关。
+     */
+    private void showGatewayDialog() {
+        String url = "http://" + Prefs.browserHost(this) + ":"
+                + GatewayService.gatewayPort(this) + "/v1";
+        final String secret = LanInfo.lanSecret(this);
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("网关地址\n  ").append(url);
+        if (secret != null && !secret.isEmpty()) {
+            sb.append("\n\n密钥\n  ").append(LanInfo.mask(secret));
+        } else {
+            sb.append("\n\n密钥\n  还没有（共享没开或密钥已停用）");
+        }
+
+        AlertDialog.Builder b = new AlertDialog.Builder(this)
+                .setTitle("网关信息")
+                .setMessage(sb.toString())
+                .setPositiveButton("复制网关", (d, w) -> copyGateway());
+        if (secret != null && !secret.isEmpty()) {
+            b.setNeutralButton("复制密钥", (d, w) -> {
+                ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                if (cm != null) {
+                    cm.setPrimaryClip(ClipData.newPlainText("magpie", secret));
+                }
+                toast("已复制完整密钥");
+            });
+        }
+        b.setNegativeButton("关闭", null);
+        AlertDialog dlg = b.create();
+        styleDialog(dlg);
+        dlg.show();
+    }
+
     private void toast(String s) {
         Toast.makeText(this, s, Toast.LENGTH_SHORT).show();
     }
@@ -1014,15 +1057,16 @@ public class NativeHome extends Activity {
                         .append(GatewayService.gatewayPort(this)).append("/v1\n");
             }
         }
-        String secret = LanInfo.lanSecret(this);
+        final String secret = LanInfo.lanSecret(this);
         if (secret != null && !secret.isEmpty()) {
             sb.append("\n密钥\n  ").append(LanInfo.mask(secret)).append('\n');
+        } else {
+            sb.append("\n密钥\n  还没有（共享没开或密钥已停用）\n");
         }
-        sb.append("\n默认网关密钥在设置页可看完整值。\n");
         if (!Prefs.lan(this)) {
             sb.append("\n局域网访问现在是关的，去设置里打开才能被别的设备连上。");
         }
-        AlertDialog dlg = new AlertDialog.Builder(this)
+        AlertDialog.Builder b = new AlertDialog.Builder(this)
                 .setTitle("局域网访问")
                 .setMessage(sb.toString())
                 .setPositiveButton("复制地址", (d, w) -> {
@@ -1033,9 +1077,19 @@ public class NativeHome extends Activity {
                         cm.setPrimaryClip(ClipData.newPlainText("magpie", url));
                     }
                     toast("已复制 " + url);
-                })
-                .setNegativeButton("关闭", null)
-                .create();
+                });
+        // 密钥能拿到时给一个「复制密钥」按钮（明文进剪贴板）
+        if (secret != null && !secret.isEmpty()) {
+            b.setNeutralButton("复制密钥", (d, w) -> {
+                ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                if (cm != null) {
+                    cm.setPrimaryClip(ClipData.newPlainText("magpie", secret));
+                }
+                toast("已复制完整密钥");
+            });
+        }
+        b.setNegativeButton("关闭", null);
+        AlertDialog dlg = b.create();
         styleDialog(dlg);
         dlg.show();
     }

@@ -354,6 +354,11 @@ final class TraceLog {
     /** 一条请求：时刻 + 模型 + 耗时 / 下面一行 供应商 · Agent · token · 费用。 */
     private View row(JSONObject r) {
         LinearLayout box = ui.column();
+        // 每条请求一张小卡：发光描边 + 悬浮阴影，跟其它页面统一
+        GradientDrawable bg = ui.glowStroke(ui.col(M3.SURFACE_CONTAINER_LOW), 16,
+                ui.col(M3.OUTLINE_VARIANT), 1);
+        ui.glowCard(box, bg);
+        box.setPadding(ui.dp(12), ui.dp(10), ui.dp(12), ui.dp(10));
         LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         blp.bottomMargin = ui.dp(8);
@@ -422,7 +427,7 @@ final class TraceLog {
         if (sb.length() > 0) {
             TextView s = ui.text(sb.toString(), 10, M3.ON_SURFACE_VARIANT, false);
             LinearLayout.LayoutParams slp = ui.matchWrap(2);
-            slp.leftMargin = ui.dp(62);
+            slp.leftMargin = ui.dp(50);
             s.setLayoutParams(slp);
             s.setSingleLine(true);
             s.setEllipsize(android.text.TextUtils.TruncateAt.END);

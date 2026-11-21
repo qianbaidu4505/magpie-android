@@ -99,6 +99,15 @@ abstract class NativePage {
     }
 
     /**
+     * 再点一次当前 tab 时调：收起本页展开的卡片并回到顶部。
+     *
+     * <p>默认只回顶部；账号页覆盖它，把展开的供应商/账号卡片全部收起。
+     */
+    void collapseAndScrollTop() {
+        scroll.post(() -> scroll.smoothScrollTo(0, 0));
+    }
+
+    /**
      * 清空内容层并重建，**但保持滚动位置**。
      *
      * <p>直接 `removeAllViews()` 会让内容高度瞬间归零，ScrollView 就把

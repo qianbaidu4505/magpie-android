@@ -360,13 +360,14 @@ final class Ui {
     }
 
     int quotaColor(double remaining) {
-        if (remaining <= 10) {
+        // 余量语义：充足绿 / <20% 预警黄 / 耗尽红
+        if (remaining <= 0) {
             return c[M3.ERROR];
         }
-        if (remaining <= 30) {
-            return c[M3.TERTIARY];
+        if (remaining < 20) {
+            return c[M3.QUOTA_WARN];
         }
-        return c[M3.PRIMARY];
+        return c[M3.TERTIARY];
     }
 
     // ------------------------------------------------------------------
