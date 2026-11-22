@@ -10,7 +10,6 @@
 [![License](https://img.shields.io/badge/upstream-MIT-blue.svg)](https://github.com/yetone/magpie/blob/main/LICENSE)
 
 ## 下载
-(https://github.com/yetone/magpie)
 **[下载最新版 APK（GitHub Releases）](https://github.com/yqing004-boop/magpie-android/releases/latest)**
 ## 官方下载
 [yetone/magpie](https://github.com/yetone/magpie)
