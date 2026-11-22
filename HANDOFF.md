@@ -553,7 +553,7 @@ curl -s -H "Cookie: magpie_web_3430=<webKey>" \
    - `~/workspace/{long-flow, skill_pkg, subagent-plugin, tmp, tools}`
    - `~/workspace/{magpie-android-backup, magpie-rebuild}`
 
-   **⚠️ `mqgw-android` 是独立项目**（沐晴账号池网关），删前确认。
+   
 
 ### 低
 
@@ -563,7 +563,6 @@ curl -s -H "Cookie: magpie_web_3430=<webKey>" \
 
 ## 十一、用户偏好（务必遵守）
 
-1. **发版由 AI 代跑**，用户只下指令如「发 x.y.z」
 2. Release body **不要**写「构建由 AI 辅助完成」
 3. 界面要跟 magpie 网页「一模一样」，**不要自作主张加东西**
    （我曾自己加了「4 个路由组 / 自动分组」卡片，被要求删掉）
