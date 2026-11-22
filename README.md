@@ -10,8 +10,10 @@
 [![License](https://img.shields.io/badge/upstream-MIT-blue.svg)](https://github.com/yetone/magpie/blob/main/LICENSE)
 
 ## 下载
-#官方magpie [yetone/magpie](https://github.com/yetone/magpie)
+(https://github.com/yetone/magpie)
 **[下载最新版 APK（GitHub Releases）](https://github.com/yqing004-boop/magpie-android/releases/latest)**
+## 官方下载
+[yetone/magpie](https://github.com/yetone/magpie)
 
 当前只提供 **Android arm64 / arm64-v8a** 包，最低 Android 7.0（API 24）。下载后直接安装；升级请覆盖安装，不要先卸载，否则 Magpie 的本地配置、账号和数据可能被清除。
 
