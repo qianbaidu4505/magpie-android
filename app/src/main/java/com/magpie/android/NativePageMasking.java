@@ -66,6 +66,8 @@ final class NativePageMasking extends NativePage {
             MagpieApi.Result recs = MagpieApi.get(host,
                     recordsQuery(40), 6000, 15000);
             MagpieApi.Result st = MagpieApi.stateLast(host);
+            // 本地模型状态（privacy-model）：现状、可选模型、下载进度
+            MagpieApi.Result pm = MagpieApi.get(host, "/api/privacy-model", 6000, 15000);
             JSONObject sumJson = sum.ok() ? sum.json() : null;
             JSONObject recJson = recs.ok() ? recs.json() : null;
             // 脱敏开关的真实判定（照内核 maskOn()）：redact 开 / 个人信息开 /
@@ -98,10 +100,222 @@ final class NativePageMasking extends NativePage {
                 rebuildKeepingScroll(() -> {
                     content.removeAllViews();
                     content.addView(summaryCard(fSum, fOn, sumWhy));
+                    content.addView(modelCard(pm));
                     content.addView(recordsCard(fRecs, recWhy));
                 });
                 done();
             });
+        });
+    }
+
+    // ------------------------------------------------------------------
+    // 本地模型卡（脱敏的 model 层）：现状 + 模型切换 + 开关
+    // ------------------------------------------------------------------
+
+    /**
+     * 本地脱敏模型。上游网页这块有 UI 死锁 bug：一旦选了 Android 不支持的
+     * Privacy Filter 并关闭，redactModelName 锁死在前者，前端
+     * draw(m) 的 if (m.supported || m.installed) 不成立，整个选择器
+     * 都不画，用户没有任何 UI 手段切回来（重装也会再锁死）。
+     *
+     * <p>壳这块直接读 /api/privacy-model 的 models 数组画完整选择器，
+     * 不看顶层 Chosen 的 supported——这样永远能切回 AstrLink Guard
+     * （Android 上唯一支持的模型，37MB，纯 Go 推理）。
+     */
+    private View modelCard(MagpieApi.Result pm) {
+        LinearLayout card = ui.cardWithMargin();
+        LinearLayout body = ui.column();
+        card.addView(body);
+
+        LinearLayout head = ui.row();
+        LinearLayout titles = ui.column();
+        titles.addView(ui.text("用本地模型查找", 17, M3.ON_SURFACE, true));
+        TextView sub = ui.text("规则认不出的名字、地址和密码，由跑在本机的模型找出来",
+                12.5f, M3.ON_SURFACE_VARIANT, false);
+        sub.setLayoutParams(ui.matchWrap(4));
+        titles.addView(sub);
+        head.addView(titles, ui.weight(1));
+        body.addView(head);
+
+        if (pm == null || !pm.ok()) {
+            TextView e = ui.text("读不到本地模型状态："
+                    + (pm == null ? "" : pm.why()), 12, M3.ERROR, false);
+            e.setPadding(0, ui.dp(8), 0, 0);
+            body.addView(e);
+            return card;
+        }
+        JSONObject st = pm.json();
+        boolean on = st.optBoolean("on", false);
+        boolean chosen = st.optBoolean("chosen", false);
+        String curId = st.optString("model", "");
+
+        // 当前模型名 + 支持状态
+        JSONArray models = NativeData.arr(st, "models");
+        JSONObject cur = null;
+        for (int i = 0; i < models.length(); i++) {
+            JSONObject m = NativeData.at(models, i);
+            if (m != null && curId.equals(m.optString("model", ""))) {
+                cur = m;
+                break;
+            }
+        }
+        if (cur == null && models.length() > 0) {
+            cur = NativeData.at(models, 0);
+            curId = cur == null ? "" : cur.optString("model", "");
+        }
+        boolean curSupported = cur != null && cur.optBoolean("supported", false);
+        boolean curInstalled = cur != null && cur.optBoolean("installed", false);
+        boolean downloading = cur != null && cur.optBoolean("downloading", false);
+        long done = cur == null ? 0 : NativeData.lng(cur, "done");
+        long total = cur == null ? 0 : NativeData.lng(cur, "size");
+
+        String modelName = modelNameOf(curId);
+        String stateLine;
+        if (downloading) {
+            stateLine = "正在下载模型：" + NativeData.bytes(done)
+                    + " / " + NativeData.bytes(total);
+        } else if (!curSupported && !curInstalled) {
+            stateLine = modelName + " 在此系统不可用（Android 没有它的本地推理组件），"
+                    + "换下面的 AstrLink Guard 即可使用";
+        } else if (curInstalled) {
+            stateLine = modelName + " 已下载" + (on ? "，正在参与脱敏" : "，未开启");
+        } else {
+            stateLine = modelName + " 未下载（开启时自动下载 "
+                    + NativeData.bytes(total) + "）";
+        }
+        TextView state = ui.text(stateLine, 12.5f, M3.ON_SURFACE_VARIANT, false);
+        state.setLineSpacing(ui.dp(1), 1f);
+        state.setLayoutParams(ui.matchWrap(6));
+        body.addView(state);
+
+        // 锁死提示：当前选中不支持的模型时，明确告诉用户这里是解药
+        if (!curSupported && !curInstalled) {
+            TextView fix = ui.text("如果网页上切不了模型（弹「此系统暂不支持」后" +
+                            "选择器消失），在这里切换即可解开。",
+                    11.5f, M3.ON_SURFACE_VARIANT, false);
+            fix.setLineSpacing(ui.dp(1), 1f);
+            fix.setLayoutParams(ui.matchWrap(2));
+            body.addView(fix);
+        }
+
+        // 模型选择行：每个模型一张行卡，点击切换（pick）
+        for (int i = 0; i < models.length(); i++) {
+            JSONObject m = NativeData.at(models, i);
+            if (m == null) {
+                continue;
+            }
+            body.addView(modelRow(m, curId.equals(m.optString("model", ""))));
+        }
+
+        // 开关行：on/off（对当前选中模型）
+        final boolean fOn = on;
+        final String fCurId = curId;
+        TextView toggle = ui.pill(fOn ? "关闭本地模型" : "开启本地模型",
+                fOn ? M3.SURFACE_CONTAINER_HIGH : M3.PRIMARY_CONTAINER,
+                fOn ? M3.ON_SURFACE : M3.ON_PRIMARY_CONTAINER);
+        toggle.setPadding(ui.dp(18), ui.dp(10), ui.dp(18), ui.dp(10));
+        toggle.setLayoutParams(ui.matchWrap(10));
+        toggle.setOnClickListener(v -> actModel(fOn ? "off" : "on", fCurId));
+        body.addView(toggle);
+
+        // chosen 提示：只有用户亲自开启的模型才会拦请求等它
+        if (on && !chosen) {
+            TextView note = ui.text("开启的是默认模型（规则之外的补充）；"
+                    + "只有在这里亲自开启后，请求才会等待本地模型。",
+                    11.5f, M3.ON_SURFACE_VARIANT, false);
+            note.setLineSpacing(ui.dp(1), 1f);
+            note.setLayoutParams(ui.matchWrap(6));
+            body.addView(note);
+        }
+        return card;
+    }
+
+    private String modelNameOf(String id) {
+        if ("astrlink-guard".equals(id)) {
+            return "AstrLink Guard（中文英文，误报少，37MB）";
+        }
+        if ("privacy-filter".equals(id)) {
+            return "Privacy Filter（OpenAI，遮代码里的普通值，1.6GB）";
+        }
+        return id.isEmpty() ? "未知" : id;
+    }
+
+    /** 一行模型：名字 + 状态 + 选中标记，点击 = pick。 */
+    private View modelRow(JSONObject m, boolean selected) {
+        String id = m.optString("model", "");
+        boolean supported = m.optBoolean("supported", false);
+        boolean installed = m.optBoolean("installed", false);
+        boolean dl = m.optBoolean("downloading", false);
+
+        LinearLayout row = ui.row();
+        GradientDrawable rb = ui.glowStroke(ui.col(M3.SURFACE_CONTAINER_LOW), 16,
+                ui.col(selected ? M3.PRIMARY : M3.OUTLINE_VARIANT), 1);
+        ui.glowCard(row, rb);
+        row.setPadding(ui.dp(14), ui.dp(11), ui.dp(14), ui.dp(11));
+        row.setLayoutParams(ui.matchWrap(6));
+
+        LinearLayout texts = ui.column();
+        texts.addView(ui.text(modelNameOf(id) + (selected ? "　✓ 当前" : ""),
+                13.5f, M3.ON_SURFACE, true));
+        String note;
+        if (dl) {
+            note = "下载中 " + NativeData.bytes(NativeData.lng(m, "done"))
+                    + " / " + NativeData.bytes(NativeData.lng(m, "size"));
+        } else if (!supported && !installed) {
+            note = "此系统不可用（Android 无本地推理组件）";
+        } else if (installed) {
+            note = "已下载，可用";
+        } else {
+            note = "未下载 · " + NativeData.bytes(NativeData.lng(m, "size"))
+                    + " · 开启时自动下载";
+        }
+        TextView s = ui.text(note, 11, !supported && !installed
+                ? M3.ON_SURFACE_VARIANT : M3.ON_SURFACE_VARIANT, false);
+        s.setLineSpacing(ui.dp(1), 1f);
+        s.setLayoutParams(ui.matchWrap(2));
+        texts.addView(s);
+        row.addView(texts, ui.weight(1));
+
+        TextView pick = ui.text(selected ? "当前" : "切换",
+                12.5f, selected ? M3.ON_SURFACE_VARIANT : M3.PRIMARY, true);
+        pick.setPadding(ui.dp(12), ui.dp(6), ui.dp(12), ui.dp(6));
+        pick.setOnClickListener(v -> {
+            if (!selected) {
+                actModel("pick", id);
+            }
+        });
+        row.addView(pick);
+        return row;
+    }
+
+    private void toast(String s) {
+        android.widget.Toast.makeText(host, s, android.widget.Toast.LENGTH_SHORT).show();
+    }
+
+    /** POST /api/privacy-model：pick / on / off，完成后刷新整页。 */
+    private void actModel(String doing, String model) {
+        toast("正在" + ("pick".equals(doing) ? "切换模型" : doing.equals("on") ? "开启" : "关闭") + "…");
+        host.bg(() -> {
+            try {
+                JSONObject body = new JSONObject();
+                body.put("do", doing);
+                if (model != null && !model.isEmpty()) {
+                    body.put("model", model);
+                }
+                MagpieApi.Result r = MagpieApi.post(host, "/api/privacy-model",
+                        body.toString(), 30000);
+                host.post(() -> {
+                    if (r.ok()) {
+                        toast("已" + ("pick".equals(doing) ? "切换，开启时用新模型"
+                                : doing.equals("on") ? "开启（未下载会先下载）" : "关闭"));
+                        refresh(true);
+                    } else {
+                        toast("失败：" + r.why());
+                    }
+                });
+            } catch (Exception e) {
+                host.post(() -> toast("请求失败：" + e.getMessage()));
+            }
         });
     }
 
