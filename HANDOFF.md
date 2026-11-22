@@ -1,7 +1,8 @@
 # magpie-android 交接文档
 
-> 最后更新：2026-11-19
-> 当前版本：正式版 **1.4.7**；最新 **1.4.8 为 GitHub 预发布测试版**（全面屏 WebView 排版修复，待验证）
+> 最后更新：2026-11-22
+> 当前版本：**1.6.9**（VERSION_CODE=169），与发布仓库 `magpie-android-repo` HEAD 完全同步
+> 本目录 = 可构建工作副本：repo 全部源码 + 本地独有 `app/src/main/assets/bin/magpie.bin`（74M）、`scripts/debug.keystore`、`scripts/tools`、`dist/`
 > 这份文档是给「接手的人 / 下一个会话」看的，读完能直接干活。
 
 ---
