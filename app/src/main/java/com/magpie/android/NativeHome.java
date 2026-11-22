@@ -1201,20 +1201,20 @@ public class NativeHome extends Activity {
      * 的添加流程；作者邮箱同时复制到剪贴板，用户粘一下就能发）。
      */
     private void showDiagDoneDialog(final java.io.File f) {
-        CharSequence[] items = {"取消", "保存本地", "发送至作者邮箱"};
-        new android.app.AlertDialog.Builder(this)
+        // 不用 setItems（MIUI 上 setMessage + setItems 同用时列表可能不渲染），
+        // 改成三个按钮：取消 / 保存本地 / 发送邮箱，行为一致且样式可控
+        android.app.AlertDialog dlg = new android.app.AlertDialog.Builder(this)
                 .setTitle("诊断包已生成")
-                .setMessage(f.getName() + "\n大小 " + NativeData.bytes(f.length()))
-                .setItems(items, (d, w) -> {
-                    if (w == 1) {
-                        toast("已保存：" + DiagnosticsPack.where(f));
-                    } else if (w == 2) {
-                        sendDiagByEmail(f);
-                    }
-                    // w == 0 是取消，什么都不做
-                })
-                .setCancelable(true)
-                .show();
+                .setMessage(f.getName() + "\n大小 " + NativeData.bytes(f.length())
+                        + "\n\n保存到本地，或发送给作者排查。")
+                .setPositiveButton("发送至作者邮箱",
+                        (d, w) -> sendDiagByEmail(f))
+                .setNeutralButton("保存本地",
+                        (d, w) -> toast("已保存：" + DiagnosticsPack.where(f)))
+                .setNegativeButton("取消", null)
+                .create();
+        styleDialog(dlg);
+        dlg.show();
     }
 
     /** 拉起系统邮箱：mailto: 带为主题，作者邮箱同时进剪贴板。 */
