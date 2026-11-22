@@ -430,6 +430,11 @@ public class GatewayService extends Service {
             appendLog("网关异常退出，将在 " + delay + "ms 后自动重启（第 "
                     + retries.get() + "/" + MAX_RETRIES + " 次）");
             sleep(delay);
+            // 旧进程退出到内核真的放开 3425/3430 有延迟（尤其 magpie-bun 还持有
+            // 继承来的监听 fd 时）。以前这里直接 boot()，新进程 bind 撞端口 →
+            // 「address already in use」→ 退出码 1 → 又进这个分支，直到 MAX_RETRIES
+            // 用完。手动重启那条路一直有 waitPortsFree()，这里漏了。
+            waitPortsFree();
             if (!stopping.get()) {
                 synchronized (LOCK) {
                     starting = false;
@@ -629,6 +634,12 @@ public class GatewayService extends Service {
     private static final int TAIL_LINES = 400;
     private static final Object TAIL_LOCK = new Object();
 
+    /** 磁盘日志上限：50 MB。超了就把 magpie.log 改成 magpie.log.1（只留一份旧的）。 */
+    private static final long LOG_MAX = 50L * 1024 * 1024;
+    /** 当前 magpie.log 的大致字节数。-1 表示还没 stat 过。 */
+    private static volatile long logSize = -1;
+    private static final Object LOG_LOCK = new Object();
+
     static void appendLog(String line) {
         synchronized (TAIL_LOCK) {
             if (tail.length() > 0) {
@@ -645,9 +656,41 @@ public class GatewayService extends Service {
             if (dir != null && !dir.isDirectory()) {
                 dir.mkdirs();
             }
-            try (OutputStream out = new FileOutputStream(f, true)) {
-                out.write((line + "\n").getBytes(StandardCharsets.UTF_8));
+            byte[] bytes = (line + "\n").getBytes(StandardCharsets.UTF_8);
+            synchronized (LOG_LOCK) {
+                if (logSize < 0) {
+                    logSize = f.length();
+                }
+                // 写之前先看会不会超：超了就轮转，保证单文件不超过 LOG_MAX
+                if (logSize + bytes.length > LOG_MAX) {
+                    rotateLog(f);
+                    logSize = 0;
+                }
+                try (OutputStream out = new FileOutputStream(f, true)) {
+                    out.write(bytes);
+                }
+                logSize += bytes.length;
             }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * 把当前的 magpie.log 改成 magpie.log.1，只留一份旧的。
+     *
+     * <p>以前这里只有 append，没有上限：日志从装 App 那天起只增不减。
+     * 现在 50 MB 一轮，最坏占用 100 MB（当前 + 上一份）。
+     * 旧的 .1 先删再改名，避免 renameTo 在目标已存在时失败。
+     */
+    private static void rotateLog(File f) {
+        try {
+            File old = new File(f.getParentFile(), f.getName() + ".1");
+            if (old.exists()) {
+                //noinspection ResultOfMethodCallIgnored
+                old.delete();
+            }
+            //noinspection ResultOfMethodCallIgnored
+            f.renameTo(old);
         } catch (Exception ignored) {
         }
     }
@@ -674,9 +717,18 @@ public class GatewayService extends Service {
         synchronized (TAIL_LOCK) {
             tail.setLength(0);
         }
-        File f = logFile(App.context());
-        if (f.exists()) {
-            f.delete();
+        synchronized (LOG_LOCK) {
+            File f = logFile(App.context());
+            if (f.exists()) {
+                //noinspection ResultOfMethodCallIgnored
+                f.delete();
+            }
+            File old = new File(f.getParentFile(), f.getName() + ".1");
+            if (old.exists()) {
+                //noinspection ResultOfMethodCallIgnored
+                old.delete();
+            }
+            logSize = 0;
         }
     }
 

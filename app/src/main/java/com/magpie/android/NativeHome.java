@@ -728,7 +728,7 @@ public class NativeHome extends Activity {
         final String[][] titles = {
                 {"打开控制后台"},
                 {"重启网关", "查看日志", "复制网关地址", "忽略电池优化"},
-                {"导入本地插件", "粘贴 Marvis 登录回调", "文件管理器", "省电策略实验室"},
+                {"导入本地插件", "粘贴 Marvis 登录回调", "文件管理器", "省电策略实验室", "缓存清理"},
                 {"检查 magpie 更新", "检查 App 更新", "更新设置"},
                 {"复制网页登录链接", "用浏览器打开", "设置", "关于"},
         };
@@ -740,7 +740,8 @@ public class NativeHome extends Activity {
                 {"从手机存储选文件夹，拷进沙箱并交给 magpie",
                         "浏览器里登录完，把地址栏整条 URL 贴进来",
                         "浏览、导入、删除、复制 magpie HOME 目录里的文件",
-                        "诊断后台被冻结的原因，可一键设无限制（需 root）"},
+                        "诊断后台被冻结的原因，可一键设无限制（需 root）",
+                        "删旧版 Bun、更新包残留、可重建的索引，实测能腾出几百 MB"},
                 {"拉 GitHub 上的新版二进制，不用重装 APK", "下载新版 APK 并调系统安装器",
                         "内核与壳软件各自的稳定/测试渠道和更新源"},
                 {"带 k= 的完整网页地址，粘到浏览器里直接登进去（绕过登录页）",
@@ -751,7 +752,7 @@ public class NativeHome extends Activity {
         final String[][] icons = {
                 {"\u2699"},
                 {"\u27f3", "\u25a4", "\u29c9", "\u26a1"},
-                {"\u2913", "\u270e", "\u25a4", "\u26a1"},
+                {"\u2913", "\u270e", "\u25a4", "\u26a1", "\u267b"},
                 {"\u21e9", "\u2b07", "\u2699"},
                 {"\u29c9", "\u2197", "\u2699", "\u24d8"},
         };
@@ -897,8 +898,10 @@ public class NativeHome extends Activity {
                     PluginTools.promptMarvisCallback(this, ui, this::styleDialog);
                 } else if (index == 2) {
                     FileManager.open(this, ui, FileManager.root(this));
-                } else {
+                } else if (index == 3) {
                     PowerLab.show(this, ui);
+                } else {
+                    CacheCleaner.show(this, ui);
                 }
                 break;
             case 3: // 更新
