@@ -61,7 +61,8 @@ public class NativeHome extends Activity {
     static final int TAB_OVERVIEW = 0;
     static final int TAB_USAGE = 1;
     static final int TAB_ACCOUNTS = 2;
-    static final int TAB_ROUTES = 3;
+    static final int TAB_MASKING = 3;
+    static final int TAB_ROUTES = 4;
 
     /** 前台可见时多久自己刷一次页面数据。 */
     private static final long AUTO_REFRESH = 40_000L;
@@ -82,7 +83,7 @@ public class NativeHome extends Activity {
     private FrameLayout pageHost;
     private LinearLayout tabBar;
 
-    private NativePage[] pages = new NativePage[4];
+    private NativePage[] pages = new NativePage[5];
     private int tab = TAB_OVERVIEW;
 
     volatile boolean gatewayReady;
@@ -487,8 +488,8 @@ public class NativeHome extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         tabBar.setLayoutParams(blp);
 
-        String[] names = {"概览", "用量", "账号", "路由"};
-        String[] glyphs = {"\u25C9", "\u2261", "\u25D1", "\u21C4"};
+        String[] names = {"概览", "用量", "账号", "脱敏", "路由"};
+        String[] glyphs = {"\u25C9", "\u2261", "\u25D1", "\u25C7", "\u21C4"};
         tabViews.clear();
         tabGlyphs.clear();
         for (int i = 0; i < names.length; i++) {
@@ -546,6 +547,8 @@ public class NativeHome extends Activity {
                 return new NativePageUsage(this);
             case TAB_ACCOUNTS:
                 return new NativePageAccounts(this);
+            case TAB_MASKING:
+                return new NativePageMasking(this);
             case TAB_ROUTES:
                 return new NativePageRoutes(this);
             default:
@@ -554,7 +557,7 @@ public class NativeHome extends Activity {
     }
 
     void selectTab(int which, boolean refresh) {
-        tab = Math.max(0, Math.min(3, which));
+        tab = Math.max(0, Math.min(4, which));
         // 设计稿：选中态用青色文字 + 青色图标，无胶囊背景，更克制
         int onFg = ui.design ? M3.PRIMARY : M3.ON_SECONDARY_CONTAINER;
         for (int i = 0; i < tabViews.size(); i++) {
@@ -1109,21 +1112,81 @@ public class NativeHome extends Activity {
         t.setPadding(p, p, p, p);
         t.setTextIsSelectable(true);
         sc.addView(t);
-        AlertDialog dlg = new AlertDialog.Builder(this)
-                .setTitle("magpie 日志（最后 200 行）")
-                .setView(sc)
-                .setNeutralButton("复制全部", (d, w) -> {
-                    ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
-                    if (cm != null) {
-                        cm.setPrimaryClip(ClipData.newPlainText("magpie", t.getText().toString()));
-                    }
-                    toast("已复制日志");
-                })
-                .setPositiveButton("上报问题", (d, w) -> ReportIssue.show(this, ui))
-                .setNegativeButton("关闭", null)
-                .create();
-        styleDialog(dlg);
+
+        // 自建内容：日志 + 底部按钮行（四个动作，含「导出诊断包」）
+        LinearLayout box = ui.column();
+        LinearLayout head = ui.row();
+        head.setPadding(ui.dp(20), ui.dp(18), ui.dp(20), ui.dp(6));
+        head.addView(ui.text("magpie 日志（最后 200 行）", 18, M3.ON_SURFACE, true), ui.weight(1));
+        box.addView(head);
+        LinearLayout scWrap = ui.column();
+        scWrap.addView(sc, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ui.dp(420)));
+        box.addView(scWrap);
+
+        LinearLayout actions = ui.row();
+        actions.setPadding(ui.dp(12), ui.dp(8), ui.dp(12), ui.dp(10));
+        TextView copy = ui.text("复制全部", 13.5f, M3.PRIMARY, true);
+        copy.setPadding(ui.dp(10), ui.dp(10), ui.dp(10), ui.dp(10));
+        copy.setOnClickListener(v -> {
+            ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            if (cm != null) {
+                cm.setPrimaryClip(ClipData.newPlainText("magpie", t.getText().toString()));
+            }
+            toast("已复制日志");
+        });
+        actions.addView(copy, ui.weight(1));
+
+        TextView diag = ui.text("导出诊断包", 13.5f, M3.PRIMARY, true);
+        diag.setPadding(ui.dp(10), ui.dp(10), ui.dp(10), ui.dp(10));
+        diag.setOnClickListener(v -> exportDiagnostics());
+        actions.addView(diag, ui.weight(1));
+
+        TextView report = ui.text("上报问题", 13.5f, M3.PRIMARY, true);
+        report.setPadding(ui.dp(10), ui.dp(10), ui.dp(10), ui.dp(10));
+        report.setOnClickListener(v -> ReportIssue.show(this, ui));
+        actions.addView(report, ui.weight(1));
+
+        TextView close = ui.text("关闭", 13.5f, M3.PRIMARY, true);
+        close.setPadding(ui.dp(10), ui.dp(10), ui.dp(10), ui.dp(10));
+        close.setOnClickListener(v -> {
+            if (v.getTag() instanceof android.app.Dialog) {
+                ((android.app.Dialog) v.getTag()).dismiss();
+            }
+        });
+        actions.addView(close, ui.weight(1));
+        box.addView(actions);
+
+        android.app.Dialog dlg = new android.app.Dialog(this, R.style.Theme_Magpie_Sheet);
+        close.setTag(dlg);
+        GradientDrawable bg = ui.round(ui.col(M3.SURFACE_CONTAINER_LOW), 28);
+        bg.setCornerRadii(new float[]{
+                ui.dp(28), ui.dp(28), ui.dp(28), ui.dp(28), 0, 0, 0, 0});
+        box.setBackground(bg);
+        dlg.setContentView(box);
+        Window w = dlg.getWindow();
+        if (w != null) {
+            w.setBackgroundDrawableResource(android.R.color.transparent);
+            w.setGravity(Gravity.BOTTOM);
+            int maxH = (int) (getResources().getDisplayMetrics().heightPixels * 0.88f);
+            w.setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
+                    Math.min(maxH, getResources().getDisplayMetrics().heightPixels));
+        }
         dlg.show();
+    }
+
+    /** 后台收集诊断包，完成后提示位置。 */
+    private void exportDiagnostics() {
+        toast("正在收集诊断包…");
+        bg(() -> {
+            try {
+                final java.io.File f = DiagnosticsPack.export(this);
+                post(() -> toast(DiagnosticsPack.where(f)));
+            } catch (Exception e) {
+                final String why = e.getMessage() == null ? e.toString() : e.getMessage();
+                post(() -> toast("导出失败：" + why));
+            }
+        });
     }
 
     private void ignoreBattery() {

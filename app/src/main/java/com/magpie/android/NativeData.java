@@ -70,7 +70,12 @@ final class NativeData {
     }
 
     static int num(JSONObject o, String key) {
-        return o == null ? 0 : o.optInt(key, 0);
+        return o == null ? 0 : (int) o.optLong(key, 0);
+    }
+
+    /** 取 long 字段：字节数这类累计值会超过 int 上限（int 溢出会变负数）。 */
+    static long lng(JSONObject o, String key) {
+        return o == null ? 0 : o.optLong(key, 0);
     }
 
     static double dec(JSONObject o, String key) {

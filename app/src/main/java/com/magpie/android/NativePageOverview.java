@@ -273,8 +273,8 @@ final class NativePageOverview extends NativePage {
         long errors = NativeData.num(usage, "errors");
         long retried = NativeData.num(usage, "retried");
         long canceled = NativeData.num(usage, "canceled");
-        long upBytes = NativeData.num(usage, "up_bytes");
-        long downBytes = NativeData.num(usage, "down_bytes");
+        long upBytes = NativeData.lng(usage, "up_bytes");
+        long downBytes = NativeData.lng(usage, "down_bytes");
         double cost = NativeData.dec(usage, "cost");
         long unpriced = NativeData.num(usage, "unpriced");
         long unknownCalls = NativeData.num(usage, "cache_unknown_calls");
@@ -415,26 +415,12 @@ final class NativePageOverview extends NativePage {
         row1.setLayoutParams(r1lp);
 
         row1.addView(designCell("Token 用量", NativeData.tokens(total),
-                splitLine(in, out, cacheRead, cacheWrite)), designCellLp());
+                (CharSequence) splitLine(in, out, cacheRead, cacheWrite)), designCellLp());
 
-        StringBuilder reqNotes = new StringBuilder();
-        if (errors == 0) {
-            reqNotes.append("没有失败");
-        } else {
-            reqNotes.append(errors).append(" 次失败 · 成功 ")
-                    .append(NativeData.percent(calls > 0 ? (calls - errors) * 100.0 / calls : 100));
-        }
-        if (retried > 0) {
-            reqNotes.append(" · ").append(retried).append(" 重试");
-        }
-        if (canceled > 0) {
-            reqNotes.append(" · ").append(canceled).append(" 取消");
-        }
-        if (upBytes + downBytes > 0) {
-            reqNotes.append(" · ↑").append(NativeData.bytes(upBytes))
-                    .append(" ↓").append(NativeData.bytes(downBytes));
-        }
-        row1.addView(designCell("请求数量", NativeData.count(calls), reqNotes.toString()),
+        // 请求卡：失败红 / 重试绿 / 取消黄 分色，流量在数字右侧竖排
+        row1.addView(designCell("请求数量", NativeData.count(calls),
+                coloredNotes(errors, calls, retried, canceled),
+                trafficCorner(upBytes, downBytes)),
                 designCellLp(true));
         grid.addView(row1);
 
@@ -483,8 +469,10 @@ final class NativePageOverview extends NativePage {
 
     /** 设计稿单张数据卡的布局参数，last=是否最后一张（右边留白）。 */
     private LinearLayout.LayoutParams designCellLp(boolean last) {
+        // 高度 MATCH_PARENT：同一行的两张卡等高对齐（请求卡副文多，
+        // Token 卡跟着拉伸到一样高，不会一高一矮）
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+                0, ViewGroup.LayoutParams.MATCH_PARENT, 1f);
         if (!last) {
             lp.rightMargin = ui.dp(10);
         }
@@ -492,27 +480,114 @@ final class NativePageOverview extends NativePage {
     }
 
     /** 设计稿单张数据卡：标签 + 大号无衬线数字 + 副文，独立发光卡片。 */
-    private LinearLayout designCell(String title, String big, String sub) {
+    private LinearLayout designCell(CharSequence title, String big, CharSequence sub) {
+        return designCell(title, big, sub, null);
+    }
+
+    /**
+     * 设计稿单张数据卡：标签 + 大号无衬线数字 + 副文，独立发光卡片。
+     *
+     * @param corner 右上角角标小字（如上下行流量），可为 null
+     */
+    private LinearLayout designCell(CharSequence title, String big, CharSequence sub,
+                                    String corner) {
         LinearLayout box = ui.card();
         box.setPadding(ui.dp(18), ui.dp(16), ui.dp(18), ui.dp(16));
         box.setGravity(Gravity.START);
 
-        TextView t = ui.text(title, 13, M3.ON_SURFACE_VARIANT, false);
+        // 标题行：左边标签
+        TextView t = ui.text(title.toString(), 13, M3.ON_SURFACE_VARIANT, false);
         t.setSingleLine(true);
         box.addView(t);
 
+        // 数字行：左边大数字，右边可选的流量角标（竖排两行：↑一行 ↓一行）
+        LinearLayout numRow = ui.row();
         TextView v = ui.text(big, 30, M3.ON_SURFACE, true);
         v.setSingleLine(true);
         v.setMaxLines(1);
-        LinearLayout.LayoutParams vlp = ui.matchWrap(6);
-        box.addView(v, vlp);
+        numRow.addView(v, ui.weight(1));
+        if (corner != null && !corner.isEmpty()) {
+            TextView cv = ui.text(corner, 11.5f, M3.ON_SURFACE_VARIANT, false);
+            cv.setGravity(Gravity.CENTER_VERTICAL);
+            cv.setLineSpacing(ui.dp(2), 1f);
+            numRow.addView(cv);
+        }
+        LinearLayout.LayoutParams nrlp = ui.matchWrap(6);
+        box.addView(numRow, nrlp);
 
-        TextView s = ui.text(sub, 12, M3.ON_SURFACE_VARIANT, false);
+        TextView s = new TextView(host);
+        s.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 11.5f);
+        s.setTextColor(ui.col(M3.ON_SURFACE_VARIANT));
+        s.setText(sub);
         s.setLineSpacing(ui.dp(2), 1f);
-        s.setSingleLine(true);
+        // 副文三行（失败/重试/取消各一行），放不下才省略
+        s.setMaxLines(3);
         s.setEllipsize(android.text.TextUtils.TruncateAt.END);
         box.addView(s);
         return box;
+    }
+
+    /** 副文着色片段：失败红 / 重试绿 / 取消黄。流量放标题行角标，不在这里。 */
+    private CharSequence coloredNotes(long errors, long calls, long retried, long canceled) {
+        android.text.SpannableStringBuilder sb = new android.text.SpannableStringBuilder();
+
+        android.text.style.CharacterStyle errStyle = new android.text.style.ForegroundColorSpan(
+                ui.col(M3.ERROR));
+        android.text.style.CharacterStyle okStyle = new android.text.style.ForegroundColorSpan(
+                ui.col(M3.TERTIARY));
+        android.text.style.CharacterStyle warnStyle = new android.text.style.ForegroundColorSpan(
+                ui.col(M3.QUOTA_WARN));
+        android.text.style.CharacterStyle dimStyle = new android.text.style.ForegroundColorSpan(
+                ui.col(M3.ON_SURFACE_VARIANT));
+
+        Runnable sep = () -> {
+            if (sb.length() > 0) {
+                sb.append("\n");
+            }
+        };
+
+        // 第一行：失败 / 成功率
+        int st = sb.length();
+        if (errors == 0) {
+            sb.append("没有失败");
+            sb.setSpan(okStyle, st, sb.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        } else {
+            String fail = errors + " 次失败";
+            sb.append(fail);
+            sb.setSpan(errStyle, st, sb.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            st = sb.length();
+            String ok = " · 成功 " + NativeData.percent(
+                    calls > 0 ? (calls - errors) * 100.0 / calls : 100);
+            sb.append(ok);
+            sb.setSpan(okStyle, st, sb.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+
+        // 第二行：重试后成功（绿）
+        if (retried > 0) {
+            sep.run();
+            st = sb.length();
+            sb.append(String.valueOf(retried)).append(" 次重试成功");
+            sb.setSpan(okStyle, st, sb.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+
+        // 第三行：已取消（黄）
+        if (canceled > 0) {
+            sep.run();
+            st = sb.length();
+            sb.append(String.valueOf(canceled)).append(" 次已取消");
+            sb.setSpan(warnStyle, st, sb.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+
+        // 第四行不放了：上下行流量在标题行右侧角标
+        return sb;
+    }
+
+    /** 请求卡大数字右侧的角标：竖排 ↑流量 / ↓流量。成功率只在有失败时出现在副文。 */
+    private String trafficCorner(long upBytes, long downBytes) {
+        if (upBytes + downBytes <= 0) {
+            return null;
+        }
+        return "↑ " + NativeData.bytes(upBytes) + "\n↓ " + NativeData.bytes(downBytes);
     }
 
     /** 「输入 1.1M · 输出 246K · 缓存 90M」那一行。 */
