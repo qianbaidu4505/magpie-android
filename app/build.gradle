@@ -23,8 +23,8 @@ android {
         targetSdk 28
         minSdk 24
 
-        versionCode 171
-        versionName "1.7.1"
+        versionCode 172
+        versionName "1.7.2"
         resValue "string", "default_port", "3425"
     }
 

@@ -51,6 +51,9 @@ final class DiagnosticsPack {
 
     private static final String TAG = "MagpieDiag";
 
+    /** 作者邮箱：发送至作者时收件人用，也复制到剪贴板（防止邮箱 App 带不动收件人）。 */
+    static final String AUTHOR_EMAIL = "lkjhg131456@qq.com";
+
     private DiagnosticsPack() {
     }
 
@@ -65,8 +68,10 @@ final class DiagnosticsPack {
             }
         }
         String ver = version(act);
+        // 文件名短一些：太长经某些邮件/IM 客户端会被截断甚至拒收。
+        // 收集时间放在 zip 里的 info.txt 首行，文件名只留版本 + 当天日期。
         File out = new File(dir, "magpie-diag-" + ver + "-"
-                + new java.text.SimpleDateFormat("MMdd-HHmmss", java.util.Locale.US)
+                + new java.text.SimpleDateFormat("MMdd", java.util.Locale.US)
                 .format(new java.util.Date()) + ".zip");
 
         try (ZipOutputStream z = new ZipOutputStream(new FileOutputStream(out))) {
@@ -110,6 +115,8 @@ final class DiagnosticsPack {
     private static String buildInfo(Context ctx, String ver) {
         StringBuilder sb = new StringBuilder();
         sb.append("magpie-android 诊断包\n");
+        // 收集时间只在这里显示（文件名里已经为了兼容邮件/IM 截掉了），
+        // 用完整时间戳精确到秒，方便和日志时间对齐
         sb.append("生成时间: ").append(
                 new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss",
                         java.util.Locale.US).format(new java.util.Date())).append('\n');

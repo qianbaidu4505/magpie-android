@@ -1178,18 +1178,74 @@ public class NativeHome extends Activity {
         dlg.show();
     }
 
-    /** 后台收集诊断包，完成后提示位置。 */
+    /** 后台收集诊断包，完成后弹三选项：取消 / 保存本地 / 发送至作者邮箱。 */
     private void exportDiagnostics() {
         toast("正在收集诊断包…");
         bg(() -> {
             try {
                 final java.io.File f = DiagnosticsPack.export(this);
-                post(() -> toast(DiagnosticsPack.where(f)));
+                post(() -> showDiagDoneDialog(f));
             } catch (Exception e) {
                 final String why = e.getMessage() == null ? e.toString() : e.getMessage();
                 post(() -> toast("导出失败：" + why));
             }
         });
+    }
+
+    /**
+     * 诊断包收集完后的三个选项。
+     *
+     * <p>保存本地：文件已在 Download（或应用目录），toast 提示位置。
+     * 发送至作者邮箱：先确保文件已保存，再拉起系统邮箱
+     * （ACTION_SENDTO mailto:，带主题不带附件——附件走邮箱 App 自带
+     * 的添加流程；作者邮箱同时复制到剪贴板，用户粘一下就能发）。
+     */
+    private void showDiagDoneDialog(final java.io.File f) {
+        CharSequence[] items = {"取消", "保存本地", "发送至作者邮箱"};
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("诊断包已生成")
+                .setMessage(f.getName() + "\n大小 " + NativeData.bytes(f.length()))
+                .setItems(items, (d, w) -> {
+                    if (w == 1) {
+                        toast("已保存：" + DiagnosticsPack.where(f));
+                    } else if (w == 2) {
+                        sendDiagByEmail(f);
+                    }
+                    // w == 0 是取消，什么都不做
+                })
+                .setCancelable(true)
+                .show();
+    }
+
+    /** 拉起系统邮箱：mailto: 带为主题，作者邮箱同时进剪贴板。 */
+    private void sendDiagByEmail(final java.io.File f) {
+        // 先复制邮箱地址：很多邮箱 App 对 mailto 的收件人处理不一，
+        // 剪贴板里留一份最稳，用户粘到收件人框即可
+        ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+        if (cm != null) {
+            cm.setPrimaryClip(ClipData.newPlainText("magpie",
+                    DiagnosticsPack.AUTHOR_EMAIL));
+        }
+        try {
+            String ver = "?";
+            try {
+                ver = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+            } catch (Exception ignored) {
+            }
+            Uri uri = Uri.parse("mailto:" + DiagnosticsPack.AUTHOR_EMAIL
+                    + "?subject=" + java.net.URLEncoder.encode(
+                            "Magpie for Android " + ver + " 诊断反馈", "UTF-8")
+                    + "&body=" + java.net.URLEncoder.encode(
+                            "问题描述：\n\n\n附件：" + f.getName()
+                                    + "（诊断包在 Download 目录或应用目录）", "UTF-8"));
+            startActivity(new Intent(Intent.ACTION_SENDTO, uri));
+            toast("已复制作者邮箱 " + DiagnosticsPack.AUTHOR_EMAIL
+                    + "，附件请手动添加：" + f.getName());
+        } catch (Exception e) {
+            // 设备没有邮箱 App：退化成纯复制邮箱地址，提示手动发
+            toast("没拉起邮箱 App。作者邮箱已复制："
+                    + DiagnosticsPack.AUTHOR_EMAIL);
+        }
     }
 
     private void ignoreBattery() {
