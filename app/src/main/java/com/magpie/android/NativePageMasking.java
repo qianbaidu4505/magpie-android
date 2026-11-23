@@ -45,19 +45,94 @@ final class NativePageMasking extends NativePage {
     private String mode = "req";
     /** 汇总缓存（筛选项和流向图共用）。 */
     private JSONObject lastSummary;
-    /**
-     * agent → provider → 次数。summary 接口只给两个独立的排行，
-     * 不知道谁连了谁；records 里每条都带 agent 和 provider，
-     * 客户端聚合一次就能画出真实的 fan-out。
-     */
-    private final java.util.Map<String, java.util.Map<String, Long>> pairs =
-            new java.util.LinkedHashMap<>();
     /** 记录分页：more 为 true 时可继续拉。 */
     private String lastKey = "";
     private boolean more;
 
+    /**
+     * agent → 模型 → 次数。summary 只给「按 agent 排行」和「按模型排行」两列，
+     * 不知道谁连了谁；records 每条都同时带 agent 和 provider，聚合一次就有真实配对。
+     *
+     * <p>key 同时收 id 和 name（小写），画图时两边都试，避免 id/显示名不一致导致查不到。
+     */
+    private final java.util.Map<String, java.util.Map<String, Long>> pairs =
+            new java.util.LinkedHashMap<>();
+
     NativePageMasking(NativeHome host) {
         super(host);
+    }
+
+    /** 从 records 聚合 agent → 模型 的真实配对。 */
+    private void buildPairs(MagpieApi.Result src) {
+        pairs.clear();
+        try {
+            if (src == null || !src.ok() || src.json() == null) {
+                return;
+            }
+            JSONArray rs = NativeData.arr(src.json(), "records");
+            for (int i = 0; i < rs.length(); i++) {
+                JSONObject r = NativeData.at(rs, i);
+                if (r == null) {
+                    continue;
+                }
+                String ag = NativeData.str(r, "agent", "");
+                String pv = NativeData.str(r, "provider", "");
+                if (ag.isEmpty() || pv.isEmpty()) {
+                    continue;
+                }
+                long n = Math.max(1, NativeData.lng(r, "n"));
+                // agent 和 provider 都按原样 + 小写各记一份，查表时更稳
+                addPair(ag, pv, n);
+                addPair(ag.toLowerCase(java.util.Locale.US), pv.toLowerCase(java.util.Locale.US), n);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** 查 agent 用过的模型表；id / name / 小写 都试一遍。 */
+    private java.util.Map<String, Long> lookupPair(String id, String name) {
+        if (id != null && !id.isEmpty()) {
+            java.util.Map<String, Long> m = pairs.get(id);
+            if (m != null) {
+                return m;
+            }
+            m = pairs.get(id.toLowerCase(java.util.Locale.US));
+            if (m != null) {
+                return m;
+            }
+        }
+        if (name != null && !name.isEmpty()) {
+            java.util.Map<String, Long> m = pairs.get(name);
+            if (m != null) {
+                return m;
+            }
+            m = pairs.get(name.toLowerCase(java.util.Locale.US));
+            if (m != null) {
+                return m;
+            }
+        }
+        return null;
+    }
+
+    /** used 表里有没有这个 provider（id / name / 小写 都试）。 */
+    private boolean pairHas(java.util.Map<String, Long> used, String id, String name) {
+        if (used.containsKey(id) || used.containsKey(name)) {
+            return true;
+        }
+        if (id != null && used.containsKey(id.toLowerCase(java.util.Locale.US))) {
+            return true;
+        }
+        return name != null && used.containsKey(name.toLowerCase(java.util.Locale.US));
+    }
+
+    private void addPair(String ag, String pv, long n) {
+        java.util.Map<String, Long> m = pairs.get(ag);
+        if (m == null) {
+            m = new java.util.LinkedHashMap<>();
+            pairs.put(ag, m);
+        }
+        Long was = m.get(pv);
+        m.put(pv, (was == null ? 0L : was) + n);
     }
 
     @Override
@@ -72,7 +147,7 @@ final class NativePageMasking extends NativePage {
                     "/api/masking/summary?days=" + days, 6000, 15000);
             MagpieApi.Result recs = MagpieApi.get(host,
                     recordsQuery(40), 6000, 15000);
-            // 配对聚合要足够样本：单独拉 200 条（不带筛选），只取 agent/provider 两列
+            // 真实配对（agent → 模型）从记录里聚合，summary 只给两列独立排行
             MagpieApi.Result pairSrc = MagpieApi.get(host,
                     "/api/masking/records?limit=200", 6000, 20000);
             MagpieApi.Result st = MagpieApi.stateLast(host);
@@ -94,31 +169,7 @@ final class NativePageMasking extends NativePage {
                 }
             }
             lastSummary = sumJson;
-            // 聚合 agent → provider 配对（真实 fan-out）
-            pairs.clear();
-            JSONArray pr = pairSrc.ok() && pairSrc.json() != null
-                    ? NativeData.arr(pairSrc.json(), "records") : null;
-            if (pr != null) {
-                for (int i = 0; i < pr.length(); i++) {
-                    JSONObject r = NativeData.at(pr, i);
-                    if (r == null) {
-                        continue;
-                    }
-                    String ag = NativeData.str(r, "agent", "");
-                    String pv = NativeData.str(r, "provider", "");
-                    if (ag.isEmpty() || pv.isEmpty()) {
-                        continue;
-                    }
-                    java.util.Map<String, Long> m = pairs.get(ag);
-                    if (m == null) {
-                        m = new java.util.LinkedHashMap<>();
-                        pairs.put(ag, m);
-                    }
-                    Long was = m.get(pv);
-                    m.put(pv, (was == null ? 0L : was)
-                            + Math.max(1, NativeData.lng(r, "n")));
-                }
-            }
+            buildPairs(pairSrc);
             final JSONObject fSum = sumJson;
             final JSONArray fRecs = recJson == null ? null
                     : NativeData.arr(recJson, "records");
@@ -522,65 +573,54 @@ final class NativePageMasking extends NativePage {
     }
 
     /**
-     * 流向图：左列 agent，右列模型，中间是脱敏节点。
+     * 简化流向图：左列 agent 节点，右列 provider 节点，中间连线的粗细
+     * 按该 agent 的脱敏量占比分配。自绘 Canvas，只画直线（不做曲线束）。
      *
-     * <p>核心规则（爸爸 2026-11-23 定）：
-     * <ul>
-     *   <li><b>一个 agent 一种颜色</b>：从 agent 名字之后出发，穿过脱敏节点，
-     *       连到它用过的每一个模型名字之前，全程同一个颜色。</li>
-     *   <li>线宽统一，不按量变粗细。</li>
-     *   <li>连线起点在 agent 名字右侧，终点在模型名字左侧。</li>
-     * </ul>
-     *
-     * <p>真实的 agent→provider 配对来自 records 聚合（summary 只给两列排行，
-     * 不知道谁连了谁），所以一个 agent 会带多条同色线。
+     * <p>每个 agent 用不同颜色的连线，左侧标签前有色点对应；
+     * 右侧 provider 同理，一眼能看出每条线属于谁。
      */
     private View flowGraph(JSONArray agents, JSONArray providers) {
-        // 复制一份配对表进来，避免 View 持有会变的字段
-        final java.util.Map<String, java.util.Map<String, Long>> link =
-                new java.util.LinkedHashMap<>();
-        for (java.util.Map.Entry<String, java.util.Map<String, Long>> e : pairs.entrySet()) {
-            link.put(e.getKey(), new java.util.LinkedHashMap<>(e.getValue()));
-        }
         return new android.view.View(ui.ctx) {
             @Override
             protected void onDraw(android.graphics.Canvas canvas) {
                 super.onDraw(canvas);
-                int w = getWidth(), h = getHeight();
-                if (w == 0 || h == 0) {
-                    return;
-                }
-                int an = Math.min(agents.length(), 5);
-                int pn = Math.min(providers.length(), 5);
-                if (an == 0 || pn == 0) {
-                    return;
-                }
-
                 android.graphics.Paint line = new android.graphics.Paint(
                         android.graphics.Paint.ANTI_ALIAS_FLAG);
                 line.setStyle(android.graphics.Paint.Style.STROKE);
-                line.setStrokeWidth(ui.dp(1.6f));
-
                 android.graphics.Paint text = new android.graphics.Paint(
                         android.graphics.Paint.ANTI_ALIAS_FLAG);
                 text.setColor(ui.col(M3.ON_SURFACE));
                 text.setTextSize(ui.dp(12));
-
-                android.graphics.Paint num = new android.graphics.Paint(
+                android.graphics.Paint dim = new android.graphics.Paint(
                         android.graphics.Paint.ANTI_ALIAS_FLAG);
-                num.setColor(ui.col(M3.PRIMARY));
-                num.setTextSize(ui.dp(11));
-                num.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+                dim.setColor(ui.col(M3.PRIMARY));
+                dim.setTextSize(ui.dp(11));
+                dim.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
 
-                android.graphics.Paint dot = new android.graphics.Paint(
-                        android.graphics.Paint.ANTI_ALIAS_FLAG);
-
-                int padX = ui.dp(8);
+                int w = getWidth();
+                int h = getHeight();
+                if (w == 0 || h == 0) {
+                    return;
+                }
+                int padX = ui.dp(10);
                 int midX = w / 2;
-                int magY = h / 2;
-                int magR = ui.dp(17);
 
-                // 节点纵向均匀分布
+                // 节点纵坐标：均匀分布
+                int an = Math.min(agents.length(), 5);
+                int pn = Math.min(providers.length(), 5);
+                // totalA/totalP 只用来判空（没有数据就不画图），
+                // 线宽不再按占比变化——所有 agent 一样粗
+                long totalA = 0;
+                long totalP = 0;
+                for (int i = 0; i < an; i++) {
+                    totalA += NativeData.lng(NativeData.at(agents, i), "n");
+                }
+                for (int i = 0; i < pn; i++) {
+                    totalP += NativeData.lng(NativeData.at(providers, i), "n");
+                }
+                if (totalA <= 0 || totalP <= 0) {
+                    return;
+                }
                 float[] ay = new float[an];
                 float[] py = new float[pn];
                 for (int i = 0; i < an; i++) {
@@ -590,100 +630,93 @@ final class NativePageMasking extends NativePage {
                     py[i] = h * (i + 1) / (pn + 1f);
                 }
 
-                // ---- 先算每列的标签宽度，连线才能贴着文字画 ----
-                String[] aName = new String[an];
-                String[] aNum = new String[an];
-                String[] pName = new String[pn];
-                String[] pNum = new String[pn];
-                float aTextW = 0, pTextW = 0;
+                // 连线：一个 AI 软件 = 一种颜色，贯穿 agent → 脱敏 → 它用过的所有模型。
+                // 用真实配对（pairs，从 records 聚合）决定连哪几个模型；
+                // 拿不到配对就退化成「连到同名/同索引」，至少不断线。
+                int magY = h / 2;
+                float stroke = ui.dp(1.6f);
+                line.setStrokeWidth(stroke);
+                // 先算每条线的起止 x：贴着名字画（左边在 agent 名字右侧，右边在模型名字左侧）
+                float aLineX = padX + ui.dp(4);
+                float pLineX = w - padX - ui.dp(4);
+                // 最多 5 个，每条线单独判断，不按索引强行配对
                 for (int i = 0; i < an; i++) {
                     JSONObject a = NativeData.at(agents, i);
-                    aName[i] = NativeData.pretty(NativeData.str(a, "name",
-                            NativeData.str(a, "id", "?")));
-                    aNum[i] = NativeData.count(NativeData.lng(a, "n"));
-                    aTextW = Math.max(aTextW, Math.max(
-                            text.measureText(aName[i]), num.measureText(aNum[i])));
-                }
-                for (int i = 0; i < pn; i++) {
-                    JSONObject p = NativeData.at(providers, i);
-                    pName[i] = NativeData.pretty(NativeData.str(p, "name",
-                            NativeData.str(p, "id", "?")));
-                    pNum[i] = NativeData.count(NativeData.lng(p, "n"));
-                    pTextW = Math.max(pTextW, Math.max(
-                            text.measureText(pName[i]), num.measureText(pNum[i])));
-                }
-                // 起点：agent 名字 + 色点之后；终点：模型名字之前
-                float aLineX = padX + ui.dp(6) + aTextW + ui.dp(6);
-                float pLineX = w - padX - ui.dp(6) - pTextW - ui.dp(6);
-                // 太挤就收窄，保证中间留出脱敏节点
-                float minGap = magR * 2 + ui.dp(10);
-                if (pLineX - aLineX < minGap) {
-                    float mid = (aLineX + pLineX) / 2f;
-                    aLineX = mid - minGap / 2f;
-                    pLineX = mid + minGap / 2f;
-                }
+                    String agId = NativeData.str(a, "id", "");
+                    String agName = NativeData.str(a, "name", agId);
+                    int color = (paletteColor(i) & 0x00FFFFFF) | 0x99000000;
+                    line.setColor(color);
 
-                // ---- 画线：一个 agent 一种颜色，连它用过的所有模型 ----
-                for (int i = 0; i < an; i++) {
-                    JSONObject a = NativeData.at(agents, i);
-                    String agentName = NativeData.str(a, "name", NativeData.str(a, "id", ""));
-                    int color = paletteColor(i);
-                    line.setColor((color & 0x00FFFFFF) | 0x99000000);
+                    // 查这个 agent 用过的模型（id 与 name 都试，忽略大小写）
+                    java.util.Map<String, Long> used = lookupPair(agId, agName);
 
-                    java.util.Map<String, Long> used = link.get(agentName);
-                    boolean drewAny = false;
+                    // 左段：agent → 脱敏（每个 agent 只画一次）
+                    canvas.drawLine(aLineX, ay[i], midX, magY, line);
+
+                    boolean drew = false;
                     if (used != null && !used.isEmpty()) {
                         for (int j = 0; j < pn; j++) {
                             JSONObject p = NativeData.at(providers, j);
-                            String pid = NativeData.str(p, "id", "");
-                            String pname = NativeData.str(p, "name", pid);
-                            if (!used.containsKey(pid) && !used.containsKey(pname)) {
+                            String pId = NativeData.str(p, "id", "");
+                            String pName = NativeData.str(p, "name", pId);
+                            if (!pairHas(used, pId, pName)) {
                                 continue;
                             }
-                            canvas.drawLine(aLineX, ay[i], midX - magR, magY, line);
-                            canvas.drawLine(midX + magR, magY, pLineX, py[j], line);
-                            drewAny = true;
+                            // 右段：脱敏 → 该模型，同色同宽
+                            canvas.drawLine(midX, magY, pLineX, py[j], line);
+                            drew = true;
                         }
                     }
-                    if (!drewAny) {
-                        // 没有配对数据时退化成连到中间，至少不丢节点
-                        canvas.drawLine(aLineX, ay[i], midX - magR, magY, line);
+                    if (!drew) {
+                        // 没有配对数据：退回「同索引」画法，保证图不空
+                        int j = Math.min(i, pn - 1);
+                        canvas.drawLine(midX, magY, pLineX, py[j], line);
                     }
                 }
 
-                // ---- 中间脱敏节点（画在线之上，盖住交叉处）----
-                android.graphics.Paint node = new android.graphics.Paint(
+                // 中间 magpie 圆点
+                android.graphics.Paint bird = new android.graphics.Paint(
                         android.graphics.Paint.ANTI_ALIAS_FLAG);
-                node.setColor(ui.col(M3.SURFACE));
-                canvas.drawCircle(midX, magY, magR, node);
-                node.setStyle(android.graphics.Paint.Style.STROKE);
-                node.setStrokeWidth(ui.dp(1.6f));
-                node.setColor(ui.col(M3.PRIMARY));
-                canvas.drawCircle(midX, magY, magR, node);
-                android.graphics.Paint magText = new android.graphics.Paint(
-                        android.graphics.Paint.ANTI_ALIAS_FLAG);
-                magText.setColor(ui.col(M3.PRIMARY));
-                magText.setTextSize(ui.dp(11));
-                magText.setTextAlign(android.graphics.Paint.Align.CENTER);
-                magText.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
-                canvas.drawText("脱敏", midX, magY + ui.dp(4), magText);
+                bird.setColor(ui.col(M3.PRIMARY_CONTAINER));
+                canvas.drawCircle(midX, magY, ui.dp(16), bird);
+                bird.setColor(ui.col(M3.PRIMARY));
+                bird.setStyle(android.graphics.Paint.Style.STROKE);
+                bird.setStrokeWidth(ui.dp(1.5f));
+                canvas.drawCircle(midX, magY, ui.dp(16), bird);
 
-                // ---- 左侧标签：色点 + 名字 / 数量 ----
+                // 标签：左 agent 名+量，右 provider 名+量
                 text.setTextAlign(android.graphics.Paint.Align.LEFT);
-                num.setTextAlign(android.graphics.Paint.Align.LEFT);
+                dim.setTextAlign(android.graphics.Paint.Align.LEFT);
+                android.graphics.Paint dot = new android.graphics.Paint(
+                        android.graphics.Paint.ANTI_ALIAS_FLAG);
                 for (int i = 0; i < an; i++) {
+                    JSONObject a = NativeData.at(agents, i);
+                    String name = NativeData.str(a, "name", NativeData.str(a, "id", "?"));
+                    // 色点：和连线同色，标出这条线是哪个 agent
                     dot.setColor(paletteColor(i));
-                    canvas.drawCircle(padX + ui.dp(3), ay[i] - ui.dp(4), ui.dp(3.5f), dot);
-                    canvas.drawText(aName[i], padX + ui.dp(10), ay[i] - ui.dp(2), text);
-                    canvas.drawText(aNum[i], padX + ui.dp(10), ay[i] + ui.dp(12), num);
+                    canvas.drawCircle(padX + ui.dp(3), ay[i] - ui.dp(4), ui.dp(3), dot);
+                    canvas.drawText(NativeData.pretty(name), padX + ui.dp(10),
+                            ay[i] - ui.dp(2), text);
+                    canvas.drawText(NativeData.count(NativeData.lng(a, "n")),
+                            padX + ui.dp(10), ay[i] + ui.dp(12), dim);
                 }
-                // ---- 右侧标签：名字 / 数量 + 色点（与 agent 同色由颜色循环决定）----
-                text.setTextAlign(android.graphics.Paint.Align.RIGHT);
-                num.setTextAlign(android.graphics.Paint.Align.RIGHT);
-                for (int j = 0; j < pn; j++) {
-                    canvas.drawText(pName[j], w - padX - ui.dp(10), py[j] - ui.dp(2), text);
-                    canvas.drawText(pNum[j], w - padX - ui.dp(10), py[j] + ui.dp(12), num);
+                for (int i = 0; i < pn; i++) {
+                    JSONObject p = NativeData.at(providers, i);
+                    String name = NativeData.str(p, "name", NativeData.str(p, "id", "?"));
+                    float right = w - padX - ui.dp(10);
+                    text.setTextAlign(android.graphics.Paint.Align.RIGHT);
+                    dim.setTextAlign(android.graphics.Paint.Align.RIGHT);
+                    canvas.drawText(NativeData.pretty(name), right,
+                            py[i] - ui.dp(2), text);
+                    canvas.drawText(NativeData.count(NativeData.lng(p, "n")),
+                            right, py[i] + ui.dp(12), dim);
+                    // 色点画在文字右边，颜色跟随配对的 agent（同一条线同色）
+                    dot.setColor(paletteColor(i));
+                    canvas.drawCircle(right + ui.dp(4), py[i] - ui.dp(4), ui.dp(3), dot);
                 }
+                text.setTextAlign(android.graphics.Paint.Align.CENTER);
+                dim.setTextAlign(android.graphics.Paint.Align.CENTER);
+                canvas.drawText("脱敏", midX, magY + ui.dp(4), dim);
             }
 
             @Override
@@ -691,8 +724,9 @@ final class NativePageMasking extends NativePage {
                 int an = Math.min(agents.length(), 5);
                 int pn = Math.min(providers.length(), 5);
                 int rows = Math.max(an, pn);
-                setMeasuredDimension(android.view.View.MeasureSpec.getSize(widthSpec),
-                        Math.max(ui.dp(150), rows * ui.dp(56)));
+                setMeasuredDimension(android.view.View.MeasureSpec
+                                .getSize(widthSpec),
+                        Math.max(ui.dp(120), rows * ui.dp(52)));
             }
         };
     }
