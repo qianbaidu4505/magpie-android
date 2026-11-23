@@ -467,8 +467,31 @@ final class NativePageMasking extends NativePage {
     }
 
     /**
+     * 连线调色板：每个 agent/provider 一种颜色，按索引取，循环使用。
+     *
+     * <p>配色取自 Material 常用色系，明暗模式都能看清；alpha 由调用方
+     * 叠加（这里返回不透明 RGB）。
+     */
+    private int paletteColor(int i) {
+        int[] pal = {
+                0xFF2E7D32, // 绿
+                0xFF1565C0, // 蓝
+                0xFFC62828, // 红
+                0xFF6A1B9A, // 紫
+                0xFFEF6C00, // 橙
+                0xFF00838F, // 青
+                0xFFAD1457, // 品红
+                0xFF4E342E, // 棕
+        };
+        return pal[Math.abs(i) % pal.length];
+    }
+
+    /**
      * 简化流向图：左列 agent 节点，右列 provider 节点，中间连线的粗细
      * 按该 agent 的脱敏量占比分配。自绘 Canvas，只画直线（不做曲线束）。
+     *
+     * <p>每个 agent 用不同颜色的连线，左侧标签前有色点对应；
+     * 右侧 provider 同理，一眼能看出每条线属于谁。
      */
     private View flowGraph(JSONArray agents, JSONArray providers) {
         return new android.view.View(ui.ctx) {
@@ -523,15 +546,23 @@ final class NativePageMasking extends NativePage {
                 // 真实按 agent->provider 的量没有单独接口，用 provider 量占比画右侧，
                 // agent 量占比画左侧，中间汇聚到 magpie 节点
                 int magY = h / 2;
-                line.setColor((ui.col(M3.PRIMARY) & 0x00FFFFFF) | 0x33000000);
+                // 每个 agent 一种颜色：左段用它自己的色，右段延续同一个色，
+                // 这样一眼能看出「这条线属于哪个 agent」。调色板按索引取，
+                // 超过长度就循环。
                 for (int i = 0; i < an; i++) {
+                    int c = paletteColor(i);
                     float share = (float) (NativeData.lng(NativeData.at(agents, i), "n") / (double) totalA);
-                    line.setStrokeWidth(Math.max(ui.dp(1), ui.dp(10) * share));
+                    // 左段：agent → 脱敏节点，半透明本 agent 色
+                    line.setColor((c & 0x00FFFFFF) | 0x66000000);
+                    line.setStrokeWidth(Math.max(ui.dp(1.5f), ui.dp(10) * share));
                     canvas.drawLine(padX + ui.dp(4), ay[i], midX, magY, line);
                 }
                 for (int i = 0; i < pn; i++) {
+                    // 右段：脱敏节点 → provider，用该 provider 自己的色
+                    int c = paletteColor(i);
                     float share = (float) (NativeData.lng(NativeData.at(providers, i), "n") / (double) totalP);
-                    line.setStrokeWidth(Math.max(ui.dp(1), ui.dp(10) * share));
+                    line.setColor((c & 0x00FFFFFF) | 0x66000000);
+                    line.setStrokeWidth(Math.max(ui.dp(1.5f), ui.dp(10) * share));
                     canvas.drawLine(midX, magY, w - padX - ui.dp(4), py[i], line);
                 }
 
@@ -548,25 +579,32 @@ final class NativePageMasking extends NativePage {
                 // 标签：左 agent 名+量，右 provider 名+量
                 text.setTextAlign(android.graphics.Paint.Align.LEFT);
                 dim.setTextAlign(android.graphics.Paint.Align.LEFT);
+                android.graphics.Paint dot = new android.graphics.Paint(
+                        android.graphics.Paint.ANTI_ALIAS_FLAG);
                 for (int i = 0; i < an; i++) {
                     JSONObject a = NativeData.at(agents, i);
                     String name = NativeData.str(a, "name", NativeData.str(a, "id", "?"));
-                    canvas.drawText(NativeData.pretty(name), padX, ay[i] - ui.dp(2), text);
+                    // 色点：和连线同色，标出这条线是哪个 agent
+                    dot.setColor(paletteColor(i));
+                    canvas.drawCircle(padX + ui.dp(3), ay[i] - ui.dp(4), ui.dp(3), dot);
+                    canvas.drawText(NativeData.pretty(name), padX + ui.dp(10),
+                            ay[i] - ui.dp(2), text);
                     canvas.drawText(NativeData.count(NativeData.lng(a, "n")),
-                            padX, ay[i] + ui.dp(12), dim);
+                            padX + ui.dp(10), ay[i] + ui.dp(12), dim);
                 }
                 for (int i = 0; i < pn; i++) {
                     JSONObject p = NativeData.at(providers, i);
                     String name = NativeData.str(p, "name", NativeData.str(p, "id", "?"));
-                    float tw = text.measureText(NativeData.pretty(name));
-                    float nw = dim.measureText(NativeData.count(NativeData.lng(p, "n")));
-                    float right = w - padX;
+                    float right = w - padX - ui.dp(10);
                     text.setTextAlign(android.graphics.Paint.Align.RIGHT);
                     dim.setTextAlign(android.graphics.Paint.Align.RIGHT);
                     canvas.drawText(NativeData.pretty(name), right,
                             py[i] - ui.dp(2), text);
                     canvas.drawText(NativeData.count(NativeData.lng(p, "n")),
                             right, py[i] + ui.dp(12), dim);
+                    // 色点画在文字右边
+                    dot.setColor(paletteColor(i));
+                    canvas.drawCircle(right + ui.dp(4), py[i] - ui.dp(4), ui.dp(3), dot);
                 }
                 text.setTextAlign(android.graphics.Paint.Align.CENTER);
                 dim.setTextAlign(android.graphics.Paint.Align.CENTER);
