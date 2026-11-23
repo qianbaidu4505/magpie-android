@@ -1224,6 +1224,15 @@ public class NativeHome extends Activity {
         tip.setLayoutParams(ui.matchWrap(8));
         box.addView(tip);
 
+        // 支付宝一键跳转：收款码的二维码内容就是一个 https 链接，
+        // 点按钮直接拉起支付宝到付款页，不用扫码
+        TextView alipayBtn = ui.pill("用支付宝赞赏（不用扫码）",
+                M3.PRIMARY_CONTAINER, M3.ON_PRIMARY_CONTAINER);
+        alipayBtn.setPadding(ui.dp(18), ui.dp(11), ui.dp(18), ui.dp(11));
+        alipayBtn.setLayoutParams(ui.matchWrap(10));
+        alipayBtn.setOnClickListener(v -> openAlipayDonate());
+        box.addView(alipayBtn);
+
         // 微信赞赏码
         box.addView(ui.text("微信", 13, M3.ON_SURFACE, true));
         android.widget.ImageView wx = new android.widget.ImageView(this);
@@ -1265,6 +1274,25 @@ public class NativeHome extends Activity {
                 .create();
         styleDialog(dlg);
         dlg.show();
+    }
+
+    /** 支付宝收款码解出的 URL：点开直接跳支付宝付款页。 */
+    private static final String ALIPAY_DONATE_URL = "https://qr.alipay.com/fkx14569btoofplf4ketx74";
+
+    /** 一键跳支付宝赞赏：ACTION_VIEW 打开收款链接；没装支付宝则提示。 */
+    private void openAlipayDonate() {
+        try {
+            Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(ALIPAY_DONATE_URL));
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(i);
+        } catch (Exception e) {
+            // 没装支付宝/浏览器：退回复制链接
+            ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            if (cm != null) {
+                cm.setPrimaryClip(ClipData.newPlainText("magpie", ALIPAY_DONATE_URL));
+            }
+            toast("打不开支付宝，链接已复制：" + ALIPAY_DONATE_URL);
+        }
     }
 
     /** 点赞赏码放大看，方便对方扫码。 */
