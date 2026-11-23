@@ -522,6 +522,8 @@ final class NativePageMasking extends NativePage {
                 // 节点纵坐标：均匀分布
                 int an = Math.min(agents.length(), 5);
                 int pn = Math.min(providers.length(), 5);
+                // totalA/totalP 只用来判空（没有数据就不画图），
+                // 线宽不再按占比变化——所有 agent 一样粗
                 long totalA = 0;
                 long totalP = 0;
                 for (int i = 0; i < an; i++) {
@@ -542,27 +544,27 @@ final class NativePageMasking extends NativePage {
                     py[i] = h * (i + 1) / (pn + 1f);
                 }
 
-                // 连线：每个 agent 连到所有 provider，粗细按量占比（简化：均分到 providers）
-                // 真实按 agent->provider 的量没有单独接口，用 provider 量占比画右侧，
-                // agent 量占比画左侧，中间汇聚到 magpie 节点
+                // 连线：一条线 = 一个 agent 的完整链路（agent → 脱敏 → 模型），
+                // 全程同一个颜色、同一个粗细。不做粗细区分。
                 int magY = h / 2;
-                // 每个 agent 一种颜色：左段用它自己的色，右段延续同一个色，
-                // 这样一眼能看出「这条线属于哪个 agent」。调色板按索引取，
-                // 超过长度就循环。
-                for (int i = 0; i < an; i++) {
-                    int c = paletteColor(i);
-                    float share = (float) (NativeData.lng(NativeData.at(agents, i), "n") / (double) totalA);
-                    // 左段：agent → 脱敏节点，半透明本 agent 色
-                    line.setColor((c & 0x00FFFFFF) | 0x66000000);
-                    line.setStrokeWidth(Math.max(ui.dp(1.5f), ui.dp(10) * share));
+                float stroke = ui.dp(1.5f);
+                line.setStrokeWidth(stroke);
+                int pairs = Math.min(an, pn);
+                for (int i = 0; i < pairs; i++) {
+                    int c = (paletteColor(i) & 0x00FFFFFF) | 0x88000000;
+                    line.setColor(c);
+                    // 左段：agent → 脱敏
+                    canvas.drawLine(padX + ui.dp(4), ay[i], midX, magY, line);
+                    // 右段：脱敏 → 模型，同一条线的延续，同色同宽
+                    canvas.drawLine(midX, magY, w - padX - ui.dp(4), py[i], line);
+                }
+                // 数量不齐时，多出来的节点各自连到中心（用自己那一侧的调色板色）
+                for (int i = pairs; i < an; i++) {
+                    line.setColor((paletteColor(i) & 0x00FFFFFF) | 0x88000000);
                     canvas.drawLine(padX + ui.dp(4), ay[i], midX, magY, line);
                 }
-                for (int i = 0; i < pn; i++) {
-                    // 右段：脱敏节点 → provider，用该 provider 自己的色
-                    int c = paletteColor(i);
-                    float share = (float) (NativeData.lng(NativeData.at(providers, i), "n") / (double) totalP);
-                    line.setColor((c & 0x00FFFFFF) | 0x66000000);
-                    line.setStrokeWidth(Math.max(ui.dp(1.5f), ui.dp(10) * share));
+                for (int i = pairs; i < pn; i++) {
+                    line.setColor((paletteColor(i) & 0x00FFFFFF) | 0x88000000);
                     canvas.drawLine(midX, magY, w - padX - ui.dp(4), py[i], line);
                 }
 
@@ -602,7 +604,7 @@ final class NativePageMasking extends NativePage {
                             py[i] - ui.dp(2), text);
                     canvas.drawText(NativeData.count(NativeData.lng(p, "n")),
                             right, py[i] + ui.dp(12), dim);
-                    // 色点画在文字右边
+                    // 色点画在文字右边，颜色跟随配对的 agent（同一条线同色）
                     dot.setColor(paletteColor(i));
                     canvas.drawCircle(right + ui.dp(4), py[i] - ui.dp(4), ui.dp(3), dot);
                 }
