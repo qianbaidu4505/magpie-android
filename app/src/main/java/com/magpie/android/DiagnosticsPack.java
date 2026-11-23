@@ -57,6 +57,12 @@ final class DiagnosticsPack {
     /** 作者邮箱：发送至作者时收件人用，也复制到剪贴板（防止邮箱 App 带不动收件人）。 */
     static final String AUTHOR_EMAIL = "lkjhg131456@qq.com";
 
+    /** QQ 交流群加群链接：关于页可点，也是 README 里的入口。 */
+    static final String QQ_GROUP_URL =
+            "http://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=2anVAHj2T9a4GPPPNtL2iIHqctjgYGbQ"
+                    + "&authKey=0lMP2nrT%2BvB9ZKIiyDx%2BUPzWA6MhRhSNRtGPIbmmjff0nnVLxHKEObduHhLWFDph"
+                    + "&noverify=0&group_code=1053848850";
+
     /** 进度回调：0..100 与当前步骤名。 */
     interface Progress {
         void step(int percent, String what);

@@ -1508,6 +1508,10 @@ public class NativeHome extends Activity {
         box.addView(linkRow("APK 移植制作者", "酷安 @图图没耳朵",
                 "https://www.coolapk.com/u/1642567"));
 
+        // ---- 交流群（QQ 群，可点加入）----
+        box.addView(linkRow("交流群", "QQ 群：magpie手机移植版（1053848850）",
+                DiagnosticsPack.QQ_GROUP_URL));
+
         TextView lic = ui.text("magpie 核心：Copyright © 2026 yetone · MIT License",
                 11.5f, M3.ON_SURFACE_VARIANT, false);
         lic.setLayoutParams(ui.matchWrap(14));
