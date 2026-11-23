@@ -24,6 +24,7 @@ import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -726,14 +727,15 @@ public class NativeHome extends Activity {
         // 第一组就是「打开控制后台」——最常用的一条，压在最上面，不用翻。
         final String[] groups = {"控制台", "网关", "插件", "更新", "其他"};
         final String[][] titles = {
-                {"打开控制后台"},
+                {"打开控制后台", "错误诊断"},
                 {"重启网关", "查看日志", "复制网关地址", "忽略电池优化"},
                 {"导入本地插件", "粘贴 Marvis 登录回调", "文件管理器", "省电策略实验室", "缓存清理"},
                 {"检查 magpie 更新", "检查 App 更新", "更新设置"},
                 {"复制网页登录链接", "用浏览器打开", "设置", "关于"},
         };
         final String[][] subs = {
-                {"magpie 自己的完整网页界面：插件、脱敏、同步备份都在这里"},
+                {"magpie 自己的完整网页界面：插件、脱敏、同步备份都在这里",
+                        "收集全局现场：日志、插件加载错误、流量归属、外部连接、进程资源，发作者排查"},
                 {"先停再起，改过密钥或配置后用得上",
                         "网关最后写下的三百行输出", "把 …:3425/v1 复制到剪贴板",
                         "让系统不要在熄屏后冻结网关"},
@@ -750,7 +752,7 @@ public class NativeHome extends Activity {
                         "官方仓库、移植作者与许可证"},
         };
         final String[][] icons = {
-                {"\u2699"},
+                {"\u2699", "\u2691"},
                 {"\u27f3", "\u25a4", "\u29c9", "\u26a1"},
                 {"\u2913", "\u270e", "\u25a4", "\u26a1", "\u267b"},
                 {"\u21e9", "\u2b07", "\u2699"},
@@ -870,7 +872,11 @@ public class NativeHome extends Activity {
     private void runMenuAction(int group, int index, String title) {
         switch (group) {
             case 0: // 控制台
-                openWebUi();
+                if (index == 0) {
+                    openWebUi();
+                } else {
+                    confirmAndDiagnose();
+                }
                 break;
             case 1: // 网关
                 switch (index) {
@@ -1188,6 +1194,108 @@ public class NativeHome extends Activity {
             } catch (Exception e) {
                 final String why = e.getMessage() == null ? e.toString() : e.getMessage();
                 post(() -> toast("导出失败：" + why));
+            }
+        });
+    }
+
+    // ==================================================================
+    // 错误诊断（菜单 → 控制台 → 错误诊断）
+    // ==================================================================
+
+    /**
+     * 先弹确认（耗时 + 隐私脱敏说明），确认后带百分比进度条收集，
+     * 完成后弹三选项（取消 / 保存本地 / 发送至作者邮箱）。
+     */
+    private void confirmAndDiagnose() {
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("错误诊断")
+                .setMessage("将收集一份完整的现场信息，用于定位问题：\n\n"
+                        + "• 网关日志、崩溃记录、进程与资源占用\n"
+                        + "• 插件清单与每个插件的加载错误\n"
+                        + "• 供应商/额度/路由组配置（不含密钥）\n"
+                        + "• 系统口径流量、VPN 状态、外部连接\n"
+                        + "• 数据目录结构与各文件大小\n\n"
+                        + "诊断可能耗时较久（几十秒）。\n"
+                        + "包里的密钥、Token、密码、账号都会自动脱敏或打码，"
+                        + "但其余信息仍是你的真实环境数据。")
+                .setNegativeButton("取消", null)
+                .setPositiveButton("开始诊断", (d, w) -> runDiagnose())
+                .setCancelable(true)
+                .show();
+    }
+
+    /** 带百分比进度条的诊断流程。 */
+    private void runDiagnose() {
+        // 自建对话框：标题 + 百分比大字 + 进度条 + 当前步骤
+        final android.app.AlertDialog dlg = new android.app.AlertDialog.Builder(this)
+                .setTitle("正在诊断…")
+                .setNegativeButton("取消", null)
+                .setCancelable(false)
+                .create();
+
+        LinearLayout box = ui.column();
+        int pad = ui.dp(20);
+        box.setPadding(pad, ui.dp(8), pad, ui.dp(4));
+
+        final TextView pct = ui.text("0%", 30, M3.PRIMARY, true);
+        box.addView(pct);
+
+        final ProgressBar pb = new ProgressBar(this, null,
+                android.R.attr.progressBarStyleHorizontal);
+        pb.setMax(100);
+        pb.setProgress(0);
+        pb.setProgressTintList(android.content.res.ColorStateList.valueOf(
+                ui.col(M3.PRIMARY)));
+        pb.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(
+                ui.col(M3.SURFACE_CONTAINER_HIGHEST)));
+        LinearLayout.LayoutParams plp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ui.dp(8));
+        plp.topMargin = ui.dp(8);
+        box.addView(pb, plp);
+
+        final TextView step = ui.text("准备中…", 12, M3.ON_SURFACE_VARIANT, false);
+        step.setLayoutParams(ui.matchWrap(10));
+        box.addView(step);
+
+        dlg.setView(box);
+        styleDialog(dlg);
+        dlg.show();
+
+        // 取消标志：用户点取消就不再往下走
+        final boolean[] canceled = {false};
+        dlg.setOnDismissListener(d -> canceled[0] = true);
+
+        bg(() -> {
+            try {
+                final java.io.File f = DiagnosticsPack.export(this,
+                        (percent, what) -> post(() -> {
+                            if (canceled[0]) {
+                                return;
+                            }
+                            pct.setText(percent + "%");
+                            pb.setProgress(percent);
+                            step.setText(what);
+                        }));
+                post(() -> {
+                    if (canceled[0]) {
+                        return;
+                    }
+                    dlg.dismiss();
+                    showDiagDoneDialog(f);
+                });
+            } catch (Exception e) {
+                final String why = e.getMessage() == null ? e.toString() : e.getMessage();
+                post(() -> {
+                    if (canceled[0]) {
+                        return;
+                    }
+                    dlg.dismiss();
+                    new android.app.AlertDialog.Builder(this)
+                            .setTitle("诊断失败")
+                            .setMessage(why)
+                            .setPositiveButton("知道了", null)
+                            .show();
+                });
             }
         });
     }
