@@ -838,7 +838,7 @@ final class NativePageMasking extends NativePage {
                 refresh(true);
             });
             LinearLayout.LayoutParams blp = ui.wrap();
-            blp.leftMargin = ui.dp(6);
+            blp.leftMargin = ui.dp(10);
             row1.addView(b, blp);
         }
         hs1.addView(row1, new ViewGroup.LayoutParams(
@@ -869,26 +869,30 @@ final class NativePageMasking extends NativePage {
     }
 
     /** 筛选胶囊样式。 */
+    /**
+     * 筛选胶囊（爸爸 2026-11-23 定稿样式）：
+     * 选中 = 主色实心胶囊白字；未选中 = 白底描边胶囊深色字。字号加大更醒目。
+     */
     private TextView modePill(String label, boolean on) {
-        TextView t = ui.text(label, 12, on ? M3.PRIMARY : M3.ON_SURFACE_VARIANT, on);
+        TextView t = ui.text(label, 13, on ? M3.ON_PRIMARY : M3.ON_SURFACE, true);
         t.setGravity(Gravity.CENTER);
-        t.setPadding(ui.dp(12), ui.dp(6), ui.dp(12), ui.dp(6));
+        t.setPadding(ui.dp(16), ui.dp(8), ui.dp(16), ui.dp(8));
         if (on) {
-            t.setBackground(ui.roundStroke(ui.col(M3.PRIMARY_CONTAINER), 999,
-                    ui.col(M3.PRIMARY), 1));
+            t.setBackground(ui.round(ui.col(M3.PRIMARY), 999));
         } else {
-            t.setBackground(ui.round(ui.col(M3.SURFACE_CONTAINER_HIGH), 999));
+            t.setBackground(ui.roundStroke(ui.col(M3.SURFACE), 999,
+                    ui.col(M3.OUTLINE), 1));
         }
         return t;
     }
 
     /** 筛选下拉按钮样式。 */
     private TextView dropdown(String label, Runnable onClick) {
-        TextView t = ui.text(label + " ▾", 12, M3.ON_SURFACE, false);
+        TextView t = ui.text(label + " ▾", 13, M3.ON_SURFACE, false);
         t.setGravity(Gravity.CENTER_VERTICAL);
-        t.setPadding(ui.dp(12), ui.dp(8), ui.dp(12), ui.dp(8));
-        GradientDrawable bg = ui.roundStroke(ui.col(M3.SURFACE_CONTAINER_HIGH), 12,
-                ui.col(M3.OUTLINE_VARIANT), 1);
+        t.setPadding(ui.dp(16), ui.dp(8), ui.dp(16), ui.dp(8));
+        GradientDrawable bg = ui.roundStroke(ui.col(M3.SURFACE), 999,
+                ui.col(M3.OUTLINE), 1);
         t.setBackground(bg);
         t.setOnClickListener(v -> onClick.run());
         return t;

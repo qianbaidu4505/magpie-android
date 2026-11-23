@@ -261,9 +261,10 @@ final class Ui {
 
     /** 顶栏那种小胶囊标签。 */
     TextView pill(String s, int bgRole, int fgRole) {
-        TextView t = text(s, 11.5f, fgRole, true);
+        // 加大加饱满：字号 13、内边距 16/8（爸爸 2026-11-23 统一胶囊样式）
+        TextView t = text(s, 13, fgRole, true);
         t.setBackground(round(c[bgRole], 999));
-        int px = dp(9), py = dp(4);
+        int px = dp(16), py = dp(8);
         t.setPadding(px, py, px, py);
         t.setGravity(Gravity.CENTER);
         return t;
