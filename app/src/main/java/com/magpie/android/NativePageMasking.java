@@ -807,8 +807,13 @@ final class NativePageMasking extends NativePage {
         LinearLayout.LayoutParams lp = ui.matchWrap(8);
         bar.setLayoutParams(lp);
 
-        // 第一行：按请求 / 按值 + 类型筛选胶囊（全部/机密/规则/本地模型/拦截）
+        // 第一行：按请求 / 按值 + 类型筛选胶囊（全部/机密/规则/本地模型/拦截）。
+        // 放进 HorizontalScrollView：胶囊多时能滑出来，不被右边「最近 40 条」遮挡。
+        android.widget.HorizontalScrollView hs1 = new android.widget.HorizontalScrollView(ui.ctx);
+        hs1.setHorizontalScrollBarEnabled(false);
+        hs1.setFillViewport(true);
         LinearLayout row1 = ui.row();
+        row1.setOrientation(LinearLayout.HORIZONTAL);
         TextView req = modePill("按请求", "req".equals(mode));
         req.setOnClickListener(v -> { mode = "req"; refresh(true); });
         row1.addView(req);
@@ -816,7 +821,7 @@ final class NativePageMasking extends NativePage {
         rlp1.rightMargin = ui.dp(6);
         TextView val = modePill("按值", "val".equals(mode));
         val.setOnClickListener(v -> { mode = "val"; refresh(true); });
-        row1.addView(val, ui.weight(1));
+        row1.addView(val);
 
         // 类型筛选：跟随网页 facet 定义
         String[][] facets = {{"", "全部"}, {"secret", "机密"},
@@ -836,10 +841,17 @@ final class NativePageMasking extends NativePage {
             blp.leftMargin = ui.dp(6);
             row1.addView(b, blp);
         }
-        bar.addView(row1);
+        hs1.addView(row1, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        bar.addView(hs1, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        // 第二行：智能体 / 提供方 下拉
+        // 第二行：智能体 / 提供方 下拉（同样可滑）
+        android.widget.HorizontalScrollView hs2 = new android.widget.HorizontalScrollView(ui.ctx);
+        hs2.setHorizontalScrollBarEnabled(false);
+        hs2.setFillViewport(true);
         LinearLayout row2 = ui.row();
+        row2.setOrientation(LinearLayout.HORIZONTAL);
         TextView agentDrop = dropdown("智能体: " + displayName(filterAgent, "agent"),
                 () -> pickFrom("agent"));
         LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(
@@ -849,7 +861,10 @@ final class NativePageMasking extends NativePage {
         TextView provDrop = dropdown("提供方: " + displayName(filterProvider, "provider"),
                 () -> pickFrom("provider"));
         row2.addView(provDrop);
-        bar.addView(row2);
+        hs2.addView(row2, new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        bar.addView(hs2, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         return bar;
     }
 
@@ -1107,7 +1122,7 @@ final class NativePageMasking extends NativePage {
             if (r == null) {
                 continue;
             }
-            String day = dayName(NativeData.lng(r, "t"));
+            String day = dayName(timeOf(r));
             if (!day.equals(lastDay)) {
                 lastDay = day;
                 TextView g = ui.text(day, 12, M3.ON_SURFACE_VARIANT, true);
@@ -1139,8 +1154,9 @@ final class NativePageMasking extends NativePage {
         lp.bottomMargin = ui.dp(7);
         card.setLayoutParams(lp);
 
+        // 第一行：时间 | agent → provider | 主类型胶囊 | 数量 >>
         LinearLayout l1 = ui.row();
-        TextView time = ui.mono(clock(NativeData.lng(r, "t")), 10.5f,
+        TextView time = ui.mono(clock(timeOf(r)), 10.5f,
                 M3.ON_SURFACE_VARIANT);
         time.setLayoutParams(new LinearLayout.LayoutParams(ui.dp(44),
                 ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -1158,53 +1174,113 @@ final class NativePageMasking extends NativePage {
         rt.setSingleLine(true);
         rt.setEllipsize(TextUtils.TruncateAt.MIDDLE);
         l1.addView(rt, ui.weight(1));
+
+        // 类型胶囊：取量最大的那类，带色点（绿=机密，蓝=邮箱，灰=其它）
+        // 若被拦截则显示红色「拦截」胶囊
+        JSONArray vals = NativeData.arr(r, "values");
+        String topKind = "";
+        long topN = 0;
+        for (int i = 0; i < vals.length(); i++) {
+            JSONObject v = NativeData.at(vals, i);
+            if (v == null) {
+                continue;
+            }
+            long n = NativeData.lng(v, "n");
+            if (n > topN) {
+                topN = n;
+                topKind = NativeData.str(v, "k", "other");
+            }
+        }
+        boolean blocked = NativeData.flag(r, "blocked");
+        TextView pill = ui.text(blocked ? "已拦截" : kindName(topKind) + " ×" + topN,
+                10.5f, blocked ? M3.ON_ERROR_CONTAINER : M3.ON_SURFACE, false);
+        pill.setGravity(Gravity.CENTER);
+        pill.setPadding(ui.dp(8), ui.dp(3), ui.dp(8), ui.dp(3));
+        int dotColor = blocked ? ui.col(M3.ERROR)
+                : "secret".equalsIgnoreCase(topKind) ? 0xFF2E7D32
+                : "email".equalsIgnoreCase(topKind) ? 0xFF1565C0
+                : 0xFF757575;
+        // 用 drawableLayer 叠色点：用 「●」字符 + 着色 span 最简单
+        pill.setText(("● " + pill.getText().toString()));
+        android.text.SpannableString sp = new android.text.SpannableString(pill.getText());
+        sp.setSpan(new android.text.style.ForegroundColorSpan(dotColor), 0, 1, 0);
+        sp.setSpan(new android.text.style.AbsoluteSizeSpan(9, true), 0, 1, 0);
+        pill.setText(sp);
+        pill.setBackground(ui.round(ui.col(M3.SURFACE_CONTAINER_HIGH), 999));
+        LinearLayout.LayoutParams plp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        plp.leftMargin = ui.dp(6);
+        l1.addView(pill, plp);
+
         l1.addView(ui.text(String.valueOf(NativeData.lng(r, "n")), 12.5f,
                 M3.PRIMARY, true));
         card.addView(l1);
 
-        // 第二行：模型 + 类型摘要
-        StringBuilder meta = new StringBuilder();
+        // 第二行：模型名（网页版这行只有模型）
         String model = NativeData.str(r, "model", "");
         if (!model.isEmpty()) {
-            meta.append(model);
-        }
-        JSONArray vals = NativeData.arr(r, "values");
-        Map<String, Long> kinds = new LinkedHashMap<>();
-        for (int i = 0; i < vals.length(); i++) {
-            JSONObject v = NativeData.at(vals, i);
-            if (v != null) {
-                String k = NativeData.str(v, "k", "other");
-                kinds.put(k, kinds.getOrDefault(k, 0L) + NativeData.lng(v, "n"));
-            }
-        }
-        int shown = 0;
-        for (Map.Entry<String, Long> e : kinds.entrySet()) {
-            if (shown >= 3) {
-                meta.append(" · +").append(kinds.size() - 3).append(" 类");
-                break;
-            }
-            if (meta.length() > 0) {
-                meta.append(" · ");
-            }
-            meta.append(kindName(e.getKey())).append(' ').append(e.getValue());
-            shown++;
-        }
-        if (NativeData.flag(r, "blocked")) {
-            if (meta.length() > 0) {
-                meta.append(" · ");
-            }
-            meta.append("已拦截");
-        }
-        if (meta.length() > 0) {
-            TextView m = ui.text(meta.toString(), 11, M3.ON_SURFACE_VARIANT, false);
+            TextView m = ui.text(model, 11, M3.ON_SURFACE_VARIANT, false);
             m.setSingleLine(true);
             m.setEllipsize(TextUtils.TruncateAt.END);
+            m.setLayoutParams(ui.matchWrap(2));
+            card.addView(m);
+        } else if (blocked) {
+            TextView m = ui.text("请求被拦下，没有发给厂商", 11,
+                    M3.ON_SURFACE_VARIANT, false);
             m.setLayoutParams(ui.matchWrap(2));
             card.addView(m);
         }
 
         card.setOnClickListener(v -> showOne(r));
         return card;
+    }
+
+    /**
+     * 解析记录时间：上游 t 是 RFC3339 字符串（"2026-11-23T18:05:12.3+08:00"），
+     * 旧数据可能是毫秒数字。两种都接。
+     */
+    private long timeOf(JSONObject r) {
+        if (r == null) {
+            return 0;
+        }
+        Object v = r.opt("t");
+        if (v instanceof Number) {
+            long ms = ((Number) v).longValue();
+            // 秒级时间戳（< 10^12）转毫秒
+            if (ms > 0 && ms < 1000000000000L) {
+                ms *= 1000;
+            }
+            return ms;
+        }
+        if (v instanceof String) {
+            String s = ((String) v).trim();
+            if (s.isEmpty()) {
+                return 0;
+            }
+            java.text.SimpleDateFormat[] fmts = {
+                    new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
+                            java.util.Locale.US),
+                    new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX",
+                            java.util.Locale.US),
+                    new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+                            java.util.Locale.US),
+                    new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'",
+                            java.util.Locale.US),
+                    new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss",
+                            java.util.Locale.US),
+            };
+            for (java.text.SimpleDateFormat f : fmts) {
+                try {
+                    f.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+                    java.util.Date d = f.parse(s);
+                    if (d != null) {
+                        return d.getTime();
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        return 0;
     }
 
     private String clock(long t) {
