@@ -727,14 +727,15 @@ public class NativeHome extends Activity {
         // 第一组就是「打开控制后台」——最常用的一条，压在最上面，不用翻。
         final String[] groups = {"控制台", "网关", "插件", "更新", "其他"};
         final String[][] titles = {
-                {"打开控制后台", "错误诊断"},
+                {"赞赏作者", "打开控制后台", "错误诊断"},
                 {"重启网关", "查看日志", "复制网关地址", "忽略电池优化"},
                 {"导入本地插件", "粘贴 Marvis 登录回调", "文件管理器", "省电策略实验室", "缓存清理"},
                 {"检查 magpie 更新", "检查 App 更新", "更新设置"},
                 {"复制网页登录链接", "用浏览器打开", "设置", "关于"},
         };
         final String[][] subs = {
-                {"magpie 自己的完整网页界面：插件、脱敏、同步备份都在这里",
+                {"微信赞赏码 + 支付宝收款码；纯属自愿，不构成任何服务承诺",
+                        "magpie 自己的完整网页界面：插件、脱敏、同步备份都在这里",
                         "收集全局现场：日志、插件加载错误、流量归属、外部连接、进程资源，发作者排查"},
                 {"先停再起，改过密钥或配置后用得上",
                         "网关最后写下的三百行输出", "把 …:3425/v1 复制到剪贴板",
@@ -752,7 +753,7 @@ public class NativeHome extends Activity {
                         "官方仓库、移植作者与许可证"},
         };
         final String[][] icons = {
-                {"\u2699", "\u2691"},
+                {"\u2661", "\u2699", "\u2691"},
                 {"\u27f3", "\u25a4", "\u29c9", "\u26a1"},
                 {"\u2913", "\u270e", "\u25a4", "\u26a1", "\u267b"},
                 {"\u21e9", "\u2b07", "\u2699"},
@@ -873,6 +874,8 @@ public class NativeHome extends Activity {
         switch (group) {
             case 0: // 控制台
                 if (index == 0) {
+                    showDonate();
+                } else if (index == 1) {
                     openWebUi();
                 } else {
                     confirmAndDiagnose();
@@ -1203,11 +1206,89 @@ public class NativeHome extends Activity {
     // ==================================================================
 
     /**
+     * 赞赏作者：微信赞赏码 + 支付宝收款码，两张图纵向排列。
+     *
+     * <p>纯属自愿，不构成任何服务承诺。magpie 本体由 yetone 开发，
+     * 本项目只是非官方 Android 移植。
+     */
+    private void showDonate() {
+        LinearLayout box = ui.column();
+        int pad = ui.dp(18);
+        box.setPadding(pad, ui.dp(6), pad, ui.dp(10));
+
+        TextView tip = ui.text("如果这个移植对你有用，可以请我喝杯咖啡。\n"
+                        + "赞赏纯属自愿，不构成任何服务承诺；magpie 本体由 yetone 开发，"
+                        + "本项目只是非官方 Android 移植。",
+                12, M3.ON_SURFACE_VARIANT, false);
+        tip.setLineSpacing(ui.dp(2), 1f);
+        tip.setLayoutParams(ui.matchWrap(8));
+        box.addView(tip);
+
+        // 微信赞赏码
+        box.addView(ui.text("微信", 13, M3.ON_SURFACE, true));
+        android.widget.ImageView wx = new android.widget.ImageView(this);
+        wx.setImageResource(R.drawable.donate_wechat);
+        wx.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+        wx.setAdjustViewBounds(true);
+        LinearLayout.LayoutParams wlp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ui.dp(260));
+        wlp.topMargin = ui.dp(6);
+        wlp.bottomMargin = ui.dp(14);
+        box.addView(wx, wlp);
+        wx.setOnClickListener(v -> zoomDonate(R.drawable.donate_wechat, "微信赞赏码"));
+
+        // 支付宝收款码
+        box.addView(ui.text("支付宝", 13, M3.ON_SURFACE, true));
+        android.widget.ImageView ali = new android.widget.ImageView(this);
+        ali.setImageResource(R.drawable.donate_alipay);
+        ali.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+        ali.setAdjustViewBounds(true);
+        LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ui.dp(260));
+        alp.topMargin = ui.dp(6);
+        box.addView(ali, alp);
+        ali.setOnClickListener(v -> zoomDonate(R.drawable.donate_alipay, "支付宝收款码"));
+
+        TextView hint = ui.text("点图片可放大，长按保存或直接扫码", 11,
+                M3.ON_SURFACE_VARIANT, false);
+        hint.setLayoutParams(ui.matchWrap(8));
+        box.addView(hint);
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.setVerticalScrollBarEnabled(false);
+        scroll.addView(box);
+
+        android.app.AlertDialog dlg = new android.app.AlertDialog.Builder(this)
+                .setTitle("赞赏作者")
+                .setView(scroll)
+                .setPositiveButton("关闭", null)
+                .create();
+        styleDialog(dlg);
+        dlg.show();
+    }
+
+    /** 点赞赏码放大看，方便对方扫码。 */
+    private void zoomDonate(int resId, String title) {
+        android.widget.ImageView iv = new android.widget.ImageView(this);
+        iv.setImageResource(resId);
+        iv.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+        iv.setAdjustViewBounds(true);
+        iv.setPadding(ui.dp(8), ui.dp(8), ui.dp(8), ui.dp(8));
+        android.app.AlertDialog dlg = new android.app.AlertDialog.Builder(this)
+                .setTitle(title)
+                .setView(iv)
+                .setPositiveButton("关闭", null)
+                .create();
+        styleDialog(dlg);
+        dlg.show();
+    }
+
+    /**
      * 先弹确认（耗时 + 隐私脱敏说明），确认后带百分比进度条收集，
      * 完成后弹三选项（取消 / 保存本地 / 发送至作者邮箱）。
      */
     private void confirmAndDiagnose() {
-        new android.app.AlertDialog.Builder(this)
+        android.app.AlertDialog dlg = new android.app.AlertDialog.Builder(this)
                 .setTitle("错误诊断")
                 .setMessage("将收集一份完整的现场信息，用于定位问题：\n\n"
                         + "• 网关日志、崩溃记录、进程与资源占用\n"
@@ -1221,7 +1302,9 @@ public class NativeHome extends Activity {
                 .setNegativeButton("取消", null)
                 .setPositiveButton("开始诊断", (d, w) -> runDiagnose())
                 .setCancelable(true)
-                .show();
+                .create();
+        styleDialog(dlg);
+        dlg.show();
     }
 
     /** 带百分比进度条的诊断流程。 */
