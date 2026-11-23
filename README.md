@@ -114,3 +114,16 @@ sh scripts/build-apk-local.sh
 - 本项目是独立、非官方的 Android 外壳；第三方工具和二进制遵循各自许可证，详见 [第三方声明](THIRD_PARTY_NOTICES.md)。
 - 问题反馈请发 [GitHub Issues](https://github.com/yqing004-boop/magpie-android/issues)。
 - **侵权联系删除**：如认为本仓库内容或 APK 涉及版权、商标或其他权益问题，请通过 GitHub Issue 联系维护者并说明权利归属及涉及内容；收到后会核实并及时处理。
+
+## 赞赏
+
+如果这个移植对你有用，可以请我喝杯咖啡。
+
+**赞赏纯属自愿，不构成任何服务承诺或售后义务**；magpie 本体由 [yetone](https://github.com/yetone/magpie) 开发，本项目只是非官方 Android 移植。
+
+| 微信赞赏码 | 支付宝收款码 |
+|---|---|
+| ![微信赞赏](assets/donate/wechat.jpg) | ![支付宝](assets/donate/alipay.jpg) |
+
+> App 内也有入口：菜单 → 赞赏作者
+
