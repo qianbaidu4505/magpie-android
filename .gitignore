@@ -22,3 +22,9 @@ local.properties
 # Local notes and generated files
 /README.magisk.md.bak
 *.log
+
+# 内部交接文档（含 keystore 路径与口令说明）——只在私有仓库
+/HANDOFF.md
+
+# 发版素材：正文只进 GitHub Release，不在公开仓库留档
+/RELEASE-*.md
