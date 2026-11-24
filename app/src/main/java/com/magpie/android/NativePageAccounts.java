@@ -247,26 +247,24 @@ final class NativePageAccounts extends NativePage {
         row.addView(ui.stat(String.valueOf(providers), "家供应商", M3.ON_SURFACE, 1f));
         row.addView(ui.stat(String.valueOf(offProviders.size()), "家已关闭", M3.ON_SURFACE, 1f));
 
-        // 第四格：自动签到入口（点开弹每家开关的弹层）
+        // 第四格：自动签到入口（点开弹每家开关的弹层）。
+        // half 是竖排容器：里面的子项千万别带 weight（竖排的 weight 分配的是
+        // 高度，width=0 会真·零宽把文字吞掉——1.8.9 第一次构建就栽在这）。
         TextView checkin = ui.text("签到", 20, M3.PRIMARY, true);
         checkin.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
-                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        clp.gravity = Gravity.CENTER;
-        checkin.setLayoutParams(clp);
         checkin.setOnClickListener(v -> showCheckinSheet());
         TextView sub = new TextView(host);
         sub.setText("自动签到 ›");
         sub.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 12);
         sub.setTextColor(ui.col(M3.ON_SURFACE_VARIANT));
         sub.setGravity(Gravity.CENTER);
-        sub.setLayoutParams(new LinearLayout.LayoutParams(
-                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         LinearLayout half = new LinearLayout(host);
         half.setOrientation(LinearLayout.VERTICAL);
         half.setGravity(Gravity.CENTER);
-        half.addView(checkin);
-        half.addView(sub);
+        half.addView(checkin, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        half.addView(sub, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         half.setOnClickListener(v -> showCheckinSheet());
         row.addView(half,
                 new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));

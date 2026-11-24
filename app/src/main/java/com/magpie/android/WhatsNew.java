@@ -39,6 +39,12 @@ final class WhatsNew {
     private static final android.util.SparseArray<String[]> NOTES = new android.util.SparseArray<>();
 
     static {
+        // 190 / 1.8.10：修第四格零宽（签到入口看不见的真因）
+        NOTES.put(190, new String[]{
+                "修复",
+                "• 账号页「签到」入口看不见的 bug：竖排容器里误用了权重布局，宽度被压成 0",
+                "• 现在头部卡片右侧能看到主色的「签到」和灰色的「自动签到 ›」了",
+        });
         // 189 / 1.8.9
         NOTES.put(189, new String[]{
                 "新功能",
