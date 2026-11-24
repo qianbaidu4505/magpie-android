@@ -1,6 +1,9 @@
 package com.magpie.android;
 
 import android.view.View;
+import android.graphics.drawable.GradientDrawable;
+import android.view.animation.AnimationUtils;
+import android.widget.ProgressBar;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -236,15 +239,68 @@ abstract class NativePage {
     }
 
     private void headerSpinner(boolean on) {
-        android.view.ViewParent parent = refreshHint.getParent();
+        // 读取指示挂在 layout（PullToRefresh 的 FrameLayout）上、盖在 scroll 之上，
+        // 而不是 content 里——content 会被各页 render() 的 removeAllViews 清掉，
+        // 挂里面转圈会跟着内容一起消失。现在的效果：页面内容原地不动，
+        // 顶部叠一条「转圈 + 正在读取…」，读完自己收走。
+        ensureSpinner();
+        android.view.ViewParent parent = spinnerBar.getParent();
         if (on) {
             refreshHint.setText("正在读取…");
+            spinnerBar.setVisibility(android.view.View.VISIBLE);
+            spinnerView.startAnimation(spinnerAnim);
             if (parent == null) {
-                content.addView(refreshHint, 0, ui.matchWrap());
+                layout.addView(spinnerBar, new android.widget.FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                        android.view.Gravity.TOP));
             }
-        } else if (parent != null) {
-            ((android.view.ViewGroup) parent).removeView(refreshHint);
+        } else {
+            spinnerView.clearAnimation();
+            spinnerBar.setVisibility(android.view.View.GONE);
         }
+    }
+
+    /** 顶部读取条：转圈 + 文字，浮在页面内容上方，不被内容重建清掉。惰性建（要用 host）。 */
+    private LinearLayout spinnerBar;
+    private android.view.animation.Animation spinnerAnim;
+    private android.widget.ProgressBar spinnerView;
+
+    private void ensureSpinner() {
+        if (spinnerBar != null) {
+            return;
+        }
+        spinnerView = new android.widget.ProgressBar(host);
+        spinnerBar = makeSpinnerBar();
+        spinnerAnim = makeSpinnerAnim();
+        spinnerView.setAnimation(spinnerAnim);
+    }
+
+    private LinearLayout makeSpinnerBar() {
+        LinearLayout bar = new LinearLayout(host);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setGravity(android.view.Gravity.CENTER);
+        bar.setVisibility(android.view.View.GONE);
+        GradientDrawable bg = ui.round(ui.col(M3.SURFACE_CONTAINER_HIGH), 18);
+        bg.setAlpha(230);
+        bar.setBackground(bg);
+        int pad = ui.dp(10);
+        bar.setPadding(pad, ui.dp(6), pad, ui.dp(6));
+        spinnerView.setLayoutParams(new LinearLayout.LayoutParams(ui.dp(18), ui.dp(18)));
+        bar.addView(spinnerView);
+        refreshHint.setPadding(ui.dp(8), 0, 0, 0);
+        bar.addView(refreshHint, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        return bar;
+    }
+
+    private android.view.animation.Animation makeSpinnerAnim() {
+        android.view.animation.RotateAnimation a = new android.view.animation.RotateAnimation(
+                0, 360, android.view.animation.Animation.RELATIVE_TO_SELF, 0.5f,
+                android.view.animation.Animation.RELATIVE_TO_SELF, 0.5f);
+        a.setDuration(900);
+        a.setRepeatCount(android.view.animation.Animation.INFINITE);
+        a.setInterpolator(host, android.R.anim.linear_interpolator);
+        return a;
     }
 
     // ------------------------------------------------------------------

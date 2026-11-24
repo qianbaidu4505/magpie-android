@@ -249,7 +249,17 @@ final class Checkins {
         }
         for (int i = 0; i < arr.length(); i++) {
             JSONObject a = NativeData.at(arr, i);
-            if (a != null && vendor.equals(NativeData.str(a, "by", ""))) {
+            if (a == null) {
+                continue;
+            }
+            String by = NativeData.str(a, "by", "");
+            // 上游 WorkBuddy 的 by 是空字符串（checkiner.by 注释："" for WorkBuddy），
+            // 其余各家才是 workbuddy 之外的名字；两种都认
+            if ("workbuddy".equals(vendor)) {
+                if (by.isEmpty() || "workbuddy".equals(by)) {
+                    return true;
+                }
+            } else if (vendor.equals(by)) {
                 return true;
             }
         }

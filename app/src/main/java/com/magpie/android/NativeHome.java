@@ -1423,6 +1423,18 @@ public class NativeHome extends Activity {
                     }
                     toast("已复制，粘给 AI 软件就能开始排查");
                 })
+                .setNeutralButton("AI排查复制", (d, w) -> {
+                    // 一段现成的排查话术 + 排查链接：粘给 AI 后它自己知道该干嘛
+                    String text = "我是 magpie（AI 网关）Android 版的用户，手机上开了一个诊断端口。"
+                            + "请访问下面这个地址读取现场信息（日志、崩溃记录、插件状态），"
+                            + "然后直接告诉我 magpie 有什么问题、怎么解决：\n" + addr;
+                    ClipboardManager cm =
+                            (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                    if (cm != null) {
+                        cm.setPrimaryClip(ClipData.newPlainText("magpie", text));
+                    }
+                    toast("已复制排查文案，直接粘给 AI 即可");
+                })
                 .setNegativeButton("关闭", null)
                 .setCancelable(true)
                 .create();

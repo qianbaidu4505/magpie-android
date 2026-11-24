@@ -185,13 +185,8 @@ final class NativePageAccounts extends NativePage {
     // ------------------------------------------------------------------
 
     private void render(JSONArray quotas) {
-        // 保持滚动位置：自动刷新时内容高度一归零，ScrollView 就会把
-        // 滚动位置收回去，看起来像页面「往下跳一下」
-        final int keepY = scroll.getScrollY();
+        rebuildKeepingScroll(() -> {
         content.removeAllViews();
-        if (keepY > 0) {
-            scroll.post(() -> scroll.scrollTo(0, keepY));
-        }
 
         if (quotas == null || quotas.length() == 0) {
             content.addView(emptyState());
@@ -238,6 +233,7 @@ final class NativePageAccounts extends NativePage {
         foot.setPadding(ui.dp(24), ui.dp(16), ui.dp(24), 0);
         foot.setLineSpacing(ui.dp(2), 1f);
         content.addView(foot);
+        });
     }
 
     private View summaryBar(int accounts, int providers) {
@@ -247,23 +243,39 @@ final class NativePageAccounts extends NativePage {
         row.addView(ui.stat(String.valueOf(providers), "家供应商", M3.ON_SURFACE, 1f));
         row.addView(ui.stat(String.valueOf(offProviders.size()), "家已关闭", M3.ON_SURFACE, 1f));
 
-        // 第四格：自动签到入口（点开弹每家开关的弹层）。
+        // 第四格：自动签到入口，两态 + 状态点。
+        // 自动签到 = 没开任何一家的开关（灰点）；已开启自动签到 = 至少一家开着（绿点）。
         // half 是竖排容器：里面的子项千万别带 weight（竖排的 weight 分配的是
         // 高度，width=0 会真·零宽把文字吞掉——1.8.9 第一次构建就栽在这）。
-        TextView checkin = ui.text("签到", 20, M3.PRIMARY, true);
+        boolean anyOn = checkinState != null && anyCheckinOn(checkinState);
+        TextView checkin = ui.text("自动签到", 17, M3.ON_SURFACE, true);
         checkin.setGravity(Gravity.CENTER);
         checkin.setOnClickListener(v -> showCheckinSheet());
+        LinearLayout subRow = new LinearLayout(host);
+        subRow.setOrientation(LinearLayout.HORIZONTAL);
+        subRow.setGravity(Gravity.CENTER);
+        android.view.View dot = new android.view.View(host);
+        android.graphics.drawable.GradientDrawable dotBg = new android.graphics.drawable.GradientDrawable();
+        dotBg.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        dotBg.setColor(ui.col(anyOn ? M3.TERTIARY : M3.OUTLINE_VARIANT));
+        dot.setBackground(dotBg);
+        dot.setLayoutParams(new LinearLayout.LayoutParams(ui.dp(7), ui.dp(7)));
+        LinearLayout.LayoutParams dlp2 = (LinearLayout.LayoutParams) dot.getLayoutParams();
+        dlp2.rightMargin = ui.dp(4);
+        dlp2.gravity = android.view.Gravity.CENTER_VERTICAL;
+        subRow.addView(dot);
         TextView sub = new TextView(host);
-        sub.setText("自动签到 ›");
+        sub.setText(anyOn ? "已开启自动签到 ›" : "自动签到 ›");
         sub.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 12);
-        sub.setTextColor(ui.col(M3.ON_SURFACE_VARIANT));
+        sub.setTextColor(ui.col(anyOn ? M3.ON_SURFACE : M3.ON_SURFACE_VARIANT));
         sub.setGravity(Gravity.CENTER);
+        subRow.addView(sub);
         LinearLayout half = new LinearLayout(host);
         half.setOrientation(LinearLayout.VERTICAL);
         half.setGravity(Gravity.CENTER);
         half.addView(checkin, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        half.addView(sub, new LinearLayout.LayoutParams(
+        half.addView(subRow, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         half.setOnClickListener(v -> showCheckinSheet());
         row.addView(half,
@@ -358,6 +370,17 @@ final class NativePageAccounts extends NativePage {
                 .create();
         host.styleDialogPublic(dlg);
         dlg.show();
+    }
+
+    /** 至少一家开了自动签到？ */
+    private boolean anyCheckinOn(JSONObject state) {
+        java.util.Map<String, Boolean> sw = Checkins.switches(state);
+        for (Boolean b : sw.values()) {
+            if (b) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String vendorTitle(String vendor) {
@@ -779,10 +802,25 @@ final class NativePageAccounts extends NativePage {
             return;
         }
         if ("done".equals(status)) {
+            // 已签到：灰胶囊 + 绿点
             TextView done = ui.pill("已签到", M3.SURFACE_CONTAINER_HIGH, M3.ON_SURFACE_VARIANT);
+            done.setGravity(Gravity.CENTER_VERTICAL);
+            GradientDrawable dotOk = new GradientDrawable();
+            dotOk.setShape(GradientDrawable.OVAL);
+            dotOk.setColor(ui.col(M3.TERTIARY));
+            // 文字前塞一个绿点：用 span 不方便，直接在胶囊左侧放点视图
+            LinearLayout doneRow = new LinearLayout(host);
+            doneRow.setGravity(Gravity.CENTER_VERTICAL);
+            android.view.View dv = new android.view.View(host);
+            dv.setBackground(dotOk);
+            dv.setLayoutParams(new LinearLayout.LayoutParams(ui.dp(6), ui.dp(6)));
+            LinearLayout.LayoutParams dvlp = (LinearLayout.LayoutParams) dv.getLayoutParams();
+            dvlp.rightMargin = ui.dp(5);
+            doneRow.addView(dv);
+            doneRow.addView(done);
             LinearLayout.LayoutParams dlp = ui.wrap();
             dlp.rightMargin = ui.dp(4);
-            header.addView(done, dlp);
+            header.addView(doneRow, dlp);
             return;
         }
         TextView btn = ui.pill("签到", M3.PRIMARY_CONTAINER, M3.ON_PRIMARY_CONTAINER);

@@ -39,6 +39,15 @@ final class WhatsNew {
     private static final android.util.SparseArray<String[]> NOTES = new android.util.SparseArray<>();
 
     static {
+        // 191 / 1.8.11
+        NOTES.put(191, new String[]{
+                "新功能",
+                "• AI 排查弹窗新增「AI排查复制」：一键复制排查话术+链接，粘给 AI 就能自动排查",
+                "• 签到状态两态化：头部「自动签到 / 已开启自动签到」、供应商卡「签到 / 已签到」，带红绿状态点",
+                "修复",
+                "• 读取数据不再整页下拉：改为顶部「转圈+正在读取」浮条，页面内容原地不动",
+                "• 修复 WorkBuddy 供应商卡签到按钮不显示（上游 by 字段为空串未匹配）",
+        });
         // 190 / 1.8.10：修第四格零宽（签到入口看不见的真因）
         NOTES.put(190, new String[]{
                 "修复",
