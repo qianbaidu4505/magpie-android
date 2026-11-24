@@ -411,8 +411,7 @@ final class CacheCleaner {
     private static void styleDialog(Activity act, Ui ui, AlertDialog dlg) {
         try {
             if (dlg.getWindow() != null) {
-                dlg.getWindow().setBackgroundDrawable(
-                        ui.round(ui.col(M3.SURFACE_CONTAINER_LOW), 24));
+                dlg.getWindow().setBackgroundDrawable(ui.dialogBg());
             }
         } catch (Exception ignored) {
         }

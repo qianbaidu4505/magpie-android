@@ -264,13 +264,15 @@ public class SettingsActivity extends Activity {
     /** 给系统 AlertDialog 换 M3 底色，把标题/正文/按钮刷成对应前景。 */
     private void styleDialog(android.app.AlertDialog dlg) {
         int[] c = M3.current(this);
+        int stroke = (c[M3.PRIMARY] & 0x00FFFFFF) | 0x52000000;
+        GradientDrawable dbg = new GradientDrawable();
+        dbg.setColor(c[M3.SURFACE_CONTAINER_LOW]);
+        dbg.setCornerRadius(dp(28));
+        dbg.setStroke(Math.max(1, dp(2)), stroke);
         dlg.setOnShowListener(x -> {
             android.view.Window w = dlg.getWindow();
             if (w != null) {
-                GradientDrawable bg = new GradientDrawable();
-                bg.setColor(c[M3.SURFACE_CONTAINER_HIGH]);
-                bg.setCornerRadius(dp(28));
-                w.setBackgroundDrawable(bg);
+                w.setBackgroundDrawable(dbg);
             }
             int titleId = getResources().getIdentifier("alertTitle", "id", "android");
             TextView title = titleId > 0 ? dlg.findViewById(titleId) : null;
@@ -281,12 +283,17 @@ public class SettingsActivity extends Activity {
             if (msg != null) {
                 msg.setTextColor(c[M3.ON_SURFACE_VARIANT]);
             }
+            GradientDrawable btnBg = new GradientDrawable();
+            btnBg.setColor(0x00000000);
+            btnBg.setCornerRadius(dp(999));
+            btnBg.setStroke(Math.max(1, dp(1)), stroke);
             for (int id : new int[]{android.app.AlertDialog.BUTTON_POSITIVE,
                     android.app.AlertDialog.BUTTON_NEUTRAL,
                     android.app.AlertDialog.BUTTON_NEGATIVE}) {
                 Button b = dlg.getButton(id);
                 if (b != null) {
                     b.setTextColor(c[M3.PRIMARY]);
+                    b.setBackground(btnBg);
                 }
             }
         });

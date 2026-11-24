@@ -82,6 +82,22 @@ final class Ui {
         return roundStroke(color, radiusDp, fallbackStroke, fallbackDp);
     }
 
+    /**
+     * 弹窗统一底：跟概览页的统计卡一个模子 —— 玻璃白底 + 主色低透明发光
+     * 描边 + 24dp 大圆角。所有 AlertDialog 的背景都走这里，保证弹窗和
+     * 页面卡片长得像一家人。
+     */
+    GradientDrawable dialogBg() {
+        return glowStroke(c[M3.SURFACE_CONTAINER_LOW], 24f,
+                c[M3.OUTLINE_VARIANT], 1f);
+    }
+
+    /** 弹窗文字按钮统一底：透明底 + 主色细描边胶囊（点起来像一颗卡）。 */
+    GradientDrawable dialogBtnBg() {
+        int stroke = (c[M3.PRIMARY] & 0x00FFFFFF) | 0x52000000;
+        return roundStroke(0x00000000, 999f, stroke, 1.2f);
+    }
+
     /** 给一个可点卡片挂上发光底 + 悬浮阴影。 */
     void glowCard(View v, GradientDrawable bg) {
         v.setBackground(bg);

@@ -239,8 +239,7 @@ final class AddProviderSheet {
                 .setNegativeButton(android.R.string.cancel, null)
                 .create();
         if (dlg.getWindow() != null) {
-            GradientDrawable dbg = ui.round(ui.col(M3.SURFACE_CONTAINER_HIGH), 24);
-            dlg.getWindow().setBackgroundDrawable(dbg);
+            dlg.getWindow().setBackgroundDrawable(ui.dialogBg());
         }
         dlg.show();
     }

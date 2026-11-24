@@ -97,8 +97,7 @@ final class PartSheet {
                 .create();
         try {
             if (dlg.getWindow() != null) {
-                dlg.getWindow().setBackgroundDrawable(
-                        ui.round(ui.col(M3.SURFACE_CONTAINER_HIGH), 24));
+                dlg.getWindow().setBackgroundDrawable(ui.dialogBg());
             }
         } catch (Exception ignored) {
         }

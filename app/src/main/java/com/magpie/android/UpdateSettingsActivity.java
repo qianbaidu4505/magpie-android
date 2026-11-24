@@ -146,10 +146,27 @@ public class UpdateSettingsActivity extends Activity {
         try {
             if (dlg.getWindow() != null) {
                 GradientDrawable bg = new GradientDrawable();
-                bg.setColor(c[M3.SURFACE_CONTAINER_HIGH]);
+                bg.setColor(c[M3.SURFACE_CONTAINER_LOW]);
                 bg.setCornerRadius(dp(24));
+                int stroke = (c[M3.PRIMARY] & 0x00FFFFFF) | 0x52000000;
+                bg.setStroke(Math.max(1, dp(1.5f)), stroke);
                 dlg.getWindow().setBackgroundDrawable(bg);
             }
+            dlg.setOnShowListener(x -> {
+                GradientDrawable btnBg = new GradientDrawable();
+                btnBg.setColor(0x00000000);
+                btnBg.setCornerRadius(dp(999));
+                btnBg.setStroke(Math.max(1, dp(1.2f)),
+                        (c[M3.PRIMARY] & 0x00FFFFFF) | 0x52000000);
+                for (int id : new int[]{AlertDialog.BUTTON_POSITIVE,
+                        AlertDialog.BUTTON_NEUTRAL, AlertDialog.BUTTON_NEGATIVE}) {
+                    Button b = dlg.getButton(id);
+                    if (b != null) {
+                        b.setTextColor(c[M3.PRIMARY]);
+                        b.setBackground(btnBg);
+                    }
+                }
+            });
         } catch (Exception ignored) {
         }
     }

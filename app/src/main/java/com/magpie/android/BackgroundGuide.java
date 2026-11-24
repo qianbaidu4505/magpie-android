@@ -125,19 +125,28 @@ public final class BackgroundGuide {
     }
 
     private static void style(AlertDialog dlg, int[] c) {
+        int stroke = (c[M3.PRIMARY] & 0x00FFFFFF) | 0x52000000;
+        android.graphics.drawable.GradientDrawable dbg =
+                new android.graphics.drawable.GradientDrawable();
+        dbg.setColor(c[M3.SURFACE_CONTAINER_LOW]);
+        dbg.setCornerRadius(dp(dlg.getContext(), 28));
+        dbg.setStroke(Math.max(1, dp(dlg.getContext(), 2)), stroke);
+        android.graphics.drawable.GradientDrawable btnBg =
+                new android.graphics.drawable.GradientDrawable();
+        btnBg.setColor(0x00000000);
+        btnBg.setCornerRadius(dp(dlg.getContext(), 999));
+        btnBg.setStroke(Math.max(1, dp(dlg.getContext(), 1)), stroke);
         dlg.setOnShowListener(x -> {
             android.view.Window w = dlg.getWindow();
             if (w != null) {
-                android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
-                bg.setColor(c[M3.SURFACE_CONTAINER_HIGH]);
-                bg.setCornerRadius(dp(dlg.getContext(), 28));
-                w.setBackgroundDrawable(bg);
+                w.setBackgroundDrawable(dbg);
             }
             for (int id : new int[]{AlertDialog.BUTTON_POSITIVE,
                     AlertDialog.BUTTON_NEUTRAL, AlertDialog.BUTTON_NEGATIVE}) {
                 android.widget.Button b = dlg.getButton(id);
                 if (b != null) {
                     b.setTextColor(c[M3.PRIMARY]);
+                    b.setBackground(btnBg);
                 }
             }
         });

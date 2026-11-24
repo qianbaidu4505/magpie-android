@@ -978,11 +978,27 @@ public class NativeHome extends Activity {
     private void styleDialog(AlertDialog dlg) {
         try {
             if (dlg.getWindow() != null) {
-                GradientDrawable bg = ui.round(ui.col(M3.SURFACE_CONTAINER_HIGH), 24);
-                dlg.getWindow().setBackgroundDrawable(bg);
+                dlg.getWindow().setBackgroundDrawable(ui.dialogBg());
             }
         } catch (Exception ignored) {
         }
+        dlg.setOnShowListener(x -> {
+            for (int id : new int[]{AlertDialog.BUTTON_POSITIVE,
+                    AlertDialog.BUTTON_NEUTRAL, AlertDialog.BUTTON_NEGATIVE}) {
+                android.widget.Button b = dlg.getButton(id);
+                if (b != null) {
+                    b.setTextColor(ui.col(M3.PRIMARY));
+                    b.setBackground(ui.dialogBtnBg());
+                    android.view.ViewGroup.LayoutParams blp0 = b.getLayoutParams();
+                    if (blp0 instanceof android.widget.LinearLayout.LayoutParams) {
+                        android.widget.LinearLayout.LayoutParams blp =
+                                (android.widget.LinearLayout.LayoutParams) blp0;
+                        blp.setMargins(ui.dp(6), 0, ui.dp(6), 0);
+                        b.setLayoutParams(blp);
+                    }
+                }
+            }
+        });
     }
 
     private void openWebUi() {

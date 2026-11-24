@@ -1053,10 +1053,13 @@ public class MainActivity extends Activity {
     /** 给系统 AlertDialog 换上 M3 的容器色，并把标题/正文/按钮刷成对应前景。 */
     private void styleDialog(AlertDialog dlg) {
         int[] c = M3.current(this);
+        int stroke = (c[M3.PRIMARY] & 0x00FFFFFF) | 0x52000000;
+        GradientDrawable dbg = rounded(c[M3.SURFACE_CONTAINER_LOW], 28);
+        dbg.setStroke(Math.max(1, dp(2)), stroke);
         dlg.setOnShowListener(x -> {
             Window w = dlg.getWindow();
             if (w != null) {
-                w.setBackgroundDrawable(rounded(c[M3.SURFACE_CONTAINER_HIGH], 28));
+                w.setBackgroundDrawable(dbg);
             }
             int alertTitleId = getResources().getIdentifier("alertTitle", "id", "android");
             TextView title = alertTitleId > 0 ? dlg.findViewById(alertTitleId) : null;
@@ -1067,11 +1070,14 @@ public class MainActivity extends Activity {
             if (msg != null) {
                 msg.setTextColor(c[M3.ON_SURFACE_VARIANT]);
             }
+            GradientDrawable btnBg = rounded(0x00000000, 999);
+            btnBg.setStroke(Math.max(1, dp(1)), stroke);
             for (int id : new int[]{AlertDialog.BUTTON_POSITIVE,
                     AlertDialog.BUTTON_NEUTRAL, AlertDialog.BUTTON_NEGATIVE}) {
                 Button b = dlg.getButton(id);
                 if (b != null) {
                     b.setTextColor(c[M3.PRIMARY]);
+                    b.setBackground(btnBg);
                 }
             }
         });
