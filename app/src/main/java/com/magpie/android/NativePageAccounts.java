@@ -375,8 +375,11 @@ final class NativePageAccounts extends NativePage {
     }
 
     /**
-     * 自动签到是否「已开启」：**全部**开关都开着才算（爸爸定的口径）——
-     * 只要有一个账号/供应商没开，就是「未开启自动签到」。
+     * 自动签到是否「已开启」：**全部**都开着才算（爸爸定的口径）——
+     * 供应商级开关（内置四家 + 插件型）和账号级开关（checkinAccounts）
+     * 任何一个没开，就是「未开启自动签到」。
+     * <p>为什么账号级也要算：网页后台能单独把某个账号设为「不参与每日
+     * 自动签到」（settings/checkin-account），那也是一种"没开"。
      */
     private boolean anyCheckinOn(JSONObject state) {
         java.util.Map<String, Boolean> sw = Checkins.switches(state);
@@ -386,6 +389,16 @@ final class NativePageAccounts extends NativePage {
         for (Boolean b : sw.values()) {
             if (!b) {
                 return false;
+            }
+        }
+        // 账号级：任何一个在册账号 on=false 就是没开全
+        org.json.JSONArray arr = state.optJSONArray("checkinAccounts");
+        if (arr != null) {
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject a = NativeData.at(arr, i);
+                if (a != null && !NativeData.flag(a, "on")) {
+                    return false;
+                }
             }
         }
         return true;

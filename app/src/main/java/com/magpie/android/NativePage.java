@@ -239,25 +239,9 @@ abstract class NativePage {
     }
 
     private void headerSpinner(boolean on) {
-        // 读取指示挂在 layout（PullToRefresh 的 FrameLayout）上、盖在 scroll 之上，
-        // 而不是 content 里——content 会被各页 render() 的 removeAllViews 清掉，
-        // 挂里面转圈会跟着内容一起消失。现在的效果：页面内容原地不动，
-        // 顶部叠一条「转圈 + 正在读取…」，读完自己收走。
-        ensureSpinner();
-        android.view.ViewParent parent = spinnerBar.getParent();
-        if (on) {
-            refreshHint.setText("正在读取…");
-            spinnerBar.setVisibility(android.view.View.VISIBLE);
-            spinnerView.startAnimation(spinnerAnim);
-            if (parent == null) {
-                layout.addView(spinnerBar, new android.widget.FrameLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-                        android.view.Gravity.TOP));
-            }
-        } else {
-            spinnerView.clearAnimation();
-            spinnerBar.setVisibility(android.view.View.GONE);
-        }
+        // 爸爸 2026-11-24 定：读取过程不给用户看任何指示——下拉刷新有它自己的
+        // 转圈（PullToRefresh 自带），页面内不再叠「正在读取」浮条。
+        // 空方法占位：保留调用点，将来要恢复往这里加。
     }
 
     /** 顶部读取条：转圈 + 文字，浮在页面内容上方，不被内容重建清掉。惰性建（要用 host）。 */

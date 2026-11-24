@@ -39,6 +39,12 @@ final class WhatsNew {
     private static final android.util.SparseArray<String[]> NOTES = new android.util.SparseArray<>();
 
     static {
+        // 193 / 1.8.13
+        NOTES.put(193, new String[]{
+                "调整",
+                "• 取消页面读取时的「正在读取」浮条：下拉刷新保留它自己的转圈，页面不再叠指示",
+                "• 自动签到判定再收紧：账号级开关（网页里把某账号设为「不参与签到」）也算——有一个没开就是未开启",
+        });
         // 192 / 1.8.12
         NOTES.put(192, new String[]{
                 "调整",
