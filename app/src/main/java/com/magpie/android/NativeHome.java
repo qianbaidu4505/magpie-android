@@ -1151,7 +1151,7 @@ public class NativeHome extends Activity {
 
         TextView diag = ui.text("导出诊断包", 13.5f, M3.PRIMARY, true);
         diag.setPadding(ui.dp(10), ui.dp(10), ui.dp(10), ui.dp(10));
-        diag.setOnClickListener(v -> exportDiagnostics());
+        diag.setOnClickListener(v -> confirmAndDiagnose());
         actions.addView(diag, ui.weight(1));
 
         TextView report = ui.text("上报问题", 13.5f, M3.PRIMARY, true);
@@ -1185,20 +1185,6 @@ public class NativeHome extends Activity {
                     Math.min(maxH, getResources().getDisplayMetrics().heightPixels));
         }
         dlg.show();
-    }
-
-    /** 后台收集诊断包，完成后弹三选项：取消 / 保存本地 / 发送至作者邮箱。 */
-    private void exportDiagnostics() {
-        toast("正在收集诊断包…");
-        bg(() -> {
-            try {
-                final java.io.File f = DiagnosticsPack.export(this);
-                post(() -> showDiagDoneDialog(f));
-            } catch (Exception e) {
-                final String why = e.getMessage() == null ? e.toString() : e.getMessage();
-                post(() -> toast("导出失败：" + why));
-            }
-        });
     }
 
     // ==================================================================
@@ -1378,7 +1364,7 @@ public class NativeHome extends Activity {
 
         bg(() -> {
             try {
-                final java.io.File f = DiagnosticsPack.export(this,
+                final DiagnosticsPack.DiagResult r = DiagnosticsPack.export(this,
                         (percent, what) -> post(() -> {
                             if (canceled[0]) {
                                 return;
@@ -1392,7 +1378,7 @@ public class NativeHome extends Activity {
                         return;
                     }
                     dlg.dismiss();
-                    showDiagDoneDialog(f);
+                    showDiagDoneDialog(r);
                 });
             } catch (Exception e) {
                 final String why = e.getMessage() == null ? e.toString() : e.getMessage();
@@ -1419,27 +1405,31 @@ public class NativeHome extends Activity {
      * （ACTION_SENDTO mailto:，带主题不带附件——附件走邮箱 App 自带
      * 的添加流程；作者邮箱同时复制到剪贴板，用户粘一下就能发）。
      */
-    private void showDiagDoneDialog(final java.io.File f) {
-        // 不用 setItems（MIUI 上 setMessage + setItems 同用时列表可能不渲染），
-        // 改成三个按钮：取消 / 保存本地 / 发送邮箱，行为一致且样式可控
+    private void showDiagDoneDialog(final DiagnosticsPack.DiagResult r) {
+        final java.io.File f = r.file;
+        // 完整路径直接显示（爸爸 2026-11-23 要求）：私有目录时用户能照着找
+        String msg = f.getName() + "\n大小 " + NativeData.bytes(f.length())
+                + "\n位置：" + r.location
+                + "\n完整路径：\n" + r.absolutePath
+                + "\n\n保存到本地，或发送给作者排查。";
         android.app.AlertDialog dlg = new android.app.AlertDialog.Builder(this)
                 .setTitle("诊断包已生成")
-                .setMessage(f.getName() + "\n大小 " + NativeData.bytes(f.length())
-                        + "\n\n保存到本地，或发送给作者排查。")
+                .setMessage(msg)
                 .setPositiveButton("发送至作者邮箱",
                         (d, w) -> sendDiagByEmail(f))
                 .setNeutralButton("保存本地",
-                        (d, w) -> toast("已保存：" + DiagnosticsPack.where(f)))
+                        (d, w) -> toast("已保存：" + r.location))
                 .setNegativeButton("取消", null)
                 .create();
         styleDialog(dlg);
         dlg.show();
     }
 
-    /** 拉起系统邮箱：mailto: 带为主题，作者邮箱同时进剪贴板。 */
+    /**
+     * 拉起系统邮箱：ACTION_SEND 直接带 zip 附件（FileProvider 授权），
+     * 用户不用再手动添加。作者邮箱同时进剪贴板兜底。
+     */
     private void sendDiagByEmail(final java.io.File f) {
-        // 先复制邮箱地址：很多邮箱 App 对 mailto 的收件人处理不一，
-        // 剪贴板里留一份最稳，用户粘到收件人框即可
         ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
         if (cm != null) {
             cm.setPrimaryClip(ClipData.newPlainText("magpie",
@@ -1451,19 +1441,34 @@ public class NativeHome extends Activity {
                 ver = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
             } catch (Exception ignored) {
             }
-            Uri uri = Uri.parse("mailto:" + DiagnosticsPack.AUTHOR_EMAIL
-                    + "?subject=" + java.net.URLEncoder.encode(
-                            "Magpie for Android " + ver + " 诊断反馈", "UTF-8")
-                    + "&body=" + java.net.URLEncoder.encode(
-                            "问题描述：\n\n\n附件：" + f.getName()
-                                    + "（诊断包在 Download 目录或应用目录）", "UTF-8"));
-            startActivity(new Intent(Intent.ACTION_SENDTO, uri));
-            toast("已复制作者邮箱 " + DiagnosticsPack.AUTHOR_EMAIL
-                    + "，附件请手动添加：" + f.getName());
+            android.net.Uri stream = ApkFileProvider.shareUri(this, f);
+            Intent i = new Intent(Intent.ACTION_SEND);
+            i.setType("application/zip");
+            i.putExtra(Intent.EXTRA_EMAIL, new String[]{DiagnosticsPack.AUTHOR_EMAIL});
+            i.putExtra(Intent.EXTRA_SUBJECT, "Magpie for Android " + ver + " 诊断反馈");
+            i.putExtra(Intent.EXTRA_TEXT, "问题描述：\n\n\n（附件为错误诊断包，"
+                    + "含日志/插件状态/流量归属等现场信息，密钥已脱敏）");
+            i.putExtra(Intent.EXTRA_STREAM, stream);
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(Intent.createChooser(i, "发送诊断包"));
         } catch (Exception e) {
-            // 设备没有邮箱 App：退化成纯复制邮箱地址，提示手动发
-            toast("没拉起邮箱 App。作者邮箱已复制："
-                    + DiagnosticsPack.AUTHOR_EMAIL);
+            // 没有 zip 分享能力的邮箱：退化成 mailto 纯文字，附件手动
+            try {
+                String ver = "?";
+                try {
+                    ver = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+                } catch (Exception ignored) {
+                }
+                Uri uri = Uri.parse("mailto:" + DiagnosticsPack.AUTHOR_EMAIL
+                        + "?subject=" + java.net.URLEncoder.encode(
+                                "Magpie for Android " + ver + " 诊断反馈", "UTF-8")
+                        + "&body=" + java.net.URLEncoder.encode(
+                                "问题描述：\n\n诊断包位置：" + f.getAbsolutePath(), "UTF-8"));
+                startActivity(new Intent(Intent.ACTION_SENDTO, uri));
+            } catch (Exception ignored) {
+            }
+            toast("邮箱不支持带附件，作者邮箱已复制：" + DiagnosticsPack.AUTHOR_EMAIL
+                    + "\n诊断包位置：" + f.getAbsolutePath());
         }
     }
 

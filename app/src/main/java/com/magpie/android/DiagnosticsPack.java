@@ -68,36 +68,148 @@ final class DiagnosticsPack {
         void step(int percent, String what);
     }
 
+    /**
+     * 导出结果：实际文件 + 给用户看的位置说明。
+     */
+    static final class DiagResult {
+        /** 实际文件（发邮箱附件用 FileProvider 从这里读）。 */
+        public final File file;
+        /** 人话位置："公共下载目录" / "应用目录 Download"。 */
+        public final String location;
+        /** 完整绝对路径（弹窗里显示，方便手动找）。 */
+        public final String absolutePath;
+
+        DiagResult(File file, String location) {
+            this.file = file;
+            this.location = location;
+            this.absolutePath = file.getAbsolutePath();
+        }
+    }
+
     private DiagnosticsPack() {
     }
 
     /** 生成并写入 zip，返回目标文件；失败抛异常带原因。 */
     static File export(Activity act) throws Exception {
-        return export(act, null);
+        return export(act, null).file;
     }
 
     /**
      * 生成并写入 zip，带进度回调。
      *
+     * <p>写入位置三层回退（爸爸 2026-11-23 定）：
+     * <ol>
+     *   <li><b>MediaStore.Downloads</b>（API 29+）：零权限，写完文件管理器
+     *       直接可见，绝大多数设备走这条。</li>
+     *   <li><b>/sdcard/Download 直写</b>：Android 9 及以下（targetSdk 28
+     *       的写权限还有效），老设备走这条。</li>
+     *   <li><b>应用私有目录</b> getExternalFilesDir/Download：永远成功，
+     *       兜底；弹窗显示绝对路径 + 发邮箱走 FileProvider 自动带附件。</li>
+     * </ol>
+     *
      * @param p 可为 null；每完成一步回调一次
      */
-    static File export(Activity act, Progress p) throws Exception {
-        File dir = new File("/sdcard/Download");
-        if (!dir.isDirectory() && !dir.mkdirs()) {
-            dir = new File(act.getExternalFilesDir(null), "Download");
-            if (!dir.isDirectory() && !dir.mkdirs()) {
-                dir = act.getCacheDir();
+    static DiagResult export(Activity act, Progress p) throws Exception {
+        String ver = version(act);
+        String stamp = new java.text.SimpleDateFormat("MMdd", java.util.Locale.US)
+                .format(new java.util.Date());
+        // 文件名短一些：太长经某些邮件/IM 客户端会被截断甚至拒收。
+        String name = "magpie-diag-" + ver + "-" + stamp + ".zip";
+
+        // ---- 先在私有目录生成（私有目录永远可写，生成过程不受公共存储权限影响）----
+        File privDir = new File(act.getExternalFilesDir(null), "Download");
+        if (!privDir.isDirectory() && !privDir.mkdirs()) {
+            privDir = act.getCacheDir();
+        }
+        File priv = new File(privDir, name);
+        writeZip(priv, act, ver, p);
+
+        // ---- 三层回退：把 zip 挪到用户能看见的地方 ----
+        // ① API 29+：MediaStore.Downloads，零权限，文件管理器直接可见
+        if (Build.VERSION.SDK_INT >= 29) {
+            File pub = mediaStoreSave(act, priv, name);
+            if (pub != null) {
+                priv.delete(); // 公共目录已有，私有副本删掉
+                return new DiagResult(pub, "公共下载目录（文件管理器 → Download）");
             }
         }
-        String ver = version(act);
-        // 文件名短一些：太长经某些邮件/IM 客户端会被截断甚至拒收。
-        // 收集时间在 zip 内的 info.txt 首行（精确到秒）。
-        File out = new File(dir, "magpie-diag-" + ver + "-"
-                + new java.text.SimpleDateFormat("MMdd", java.util.Locale.US)
-                .format(new java.util.Date()) + ".zip");
+        // ② 老系统直写 /sdcard/Download（targetSdk 28 + Android 9- 有权限）
+        File sd = new File("/sdcard/Download", name);
+        if (canWrite(sd.getParentFile())) {
+            try {
+                java.nio.file.Files.copy(priv.toPath(), sd.toPath(),
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                priv.delete();
+                return new DiagResult(sd, "公共下载目录（文件管理器 → Download）");
+            } catch (Exception ignored) {
+            }
+        }
+        // ③ 兜底：留在私有目录，弹窗显示绝对路径
+        return new DiagResult(priv, "应用私有目录（Android/data/com.magpie.android/files/Download）");
+    }
+
+    /** 目录是否可写（实际创建一个探测文件再删掉）。 */
+    private static boolean canWrite(File dir) {
+        if (dir == null || !dir.isDirectory()) {
+            return false;
+        }
+        try {
+            File probe = new File(dir, ".magpie-probe");
+            if (probe.createNewFile()) {
+                probe.delete();
+                return true;
+            }
+            return false;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * MediaStore.Downloads 保存（API 29+）：零权限，写完文件管理器直接可见。
+     * 成功返回公共目录里的文件路径副本，失败返回 null（调用方走下一层回退）。
+     */
+    private static File mediaStoreSave(Activity act, File priv, String name) {
+        try {
+            android.content.ContentResolver cr = act.getContentResolver();
+            android.content.ContentValues v = new android.content.ContentValues();
+            v.put(android.provider.MediaStore.Downloads.DISPLAY_NAME, name);
+            v.put(android.provider.MediaStore.Downloads.MIME_TYPE, "application/zip");
+            android.net.Uri uri = cr.insert(
+                    android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
+            if (uri == null) {
+                return null;
+            }
+            try (InputStream in = new FileInputStream(priv);
+                 java.io.OutputStream os = cr.openOutputStream(uri)) {
+                byte[] b = new byte[8192];
+                int n;
+                while ((n = in.read(b)) > 0) {
+                    os.write(b, 0, n);
+                }
+            }
+            // 拿回实际路径（用于返回值；拿不到也无妨，用 uri 描述）
+            android.database.Cursor c = cr.query(uri,
+                    new String[]{android.provider.MediaStore.MediaColumns.DATA},
+                    null, null, null);
+            String path = null;
+            if (c != null) {
+                if (c.moveToFirst()) {
+                    path = c.getString(0);
+                }
+                c.close();
+            }
+            return path != null ? new File(path) : new File("/sdcard/Download/" + name);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 实际写 zip 的过程（收集 + 打包），独立出来供三层回退共用。 */
+    private static void writeZip(File out, Activity act, String ver, Progress p)
+            throws Exception {
 
         try (ZipOutputStream z = new ZipOutputStream(new FileOutputStream(out))) {
-            // 每一步都算一个百分比，20 步左右
             int i = 0;
             report(p, i++, "读取设备与版本信息");
             put(z, "info.txt", buildInfo(act, ver));
@@ -152,7 +264,6 @@ final class DiagnosticsPack {
 
             report(p, 100, "打包完成");
         }
-        return out;
     }
 
     private static void report(Progress p, int percent, String what) {

@@ -1,6 +1,7 @@
 package com.magpie.android;
 
 import android.content.ContentProvider;
+import android.content.Context;
 import android.content.ContentValues;
 import android.database.Cursor;
 import android.net.Uri;
@@ -29,14 +30,36 @@ public final class ApkFileProvider extends ContentProvider {
 
     @Override
     public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
-        File dir = new File(getContext().getCacheDir(), "apk");
-        File f = new File(dir, uri.getLastPathSegment());
+        // URI 形如 apk/xxx.apk 或 download/xxx.zip，按第一段分发到对应目录
+        String seg = uri.getLastPathSegment();
+        File f;
+        if (seg != null && seg.startsWith("download/")) {
+            // 诊断包：读应用私有外部目录 Download
+            File dir = new File(getContext().getExternalFilesDir(null), "Download");
+            f = new File(dir, seg.substring("download/".length()));
+        } else {
+            // 壳自更新 APK：读 cacheDir/apk
+            f = new File(new File(getContext().getCacheDir(), "apk"), seg);
+        }
         return ParcelFileDescriptor.open(f, ParcelFileDescriptor.MODE_READ_ONLY);
     }
 
     @Override
     public String getType(Uri uri) {
+        String seg = uri.getLastPathSegment();
+        if (seg != null && seg.endsWith(".zip")) {
+            return "application/zip";
+        }
         return "application/vnd.android.package-archive";
+    }
+
+    /**
+     * 生成诊断包的分享 URI（FileProvider 授权给邮箱 App 读）。
+     *
+     * @param f 在 getExternalFilesDir/Download 下的 zip
+     */
+    static android.net.Uri shareUri(Context ctx, File f) {
+        return android.net.Uri.parse("content://" + AUTHORITY + "/download/" + f.getName());
     }
 
     @Override
