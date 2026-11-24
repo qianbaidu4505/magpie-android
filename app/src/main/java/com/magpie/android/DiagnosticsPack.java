@@ -286,7 +286,7 @@ final class DiagnosticsPack {
 
     // ------------------------------------------------------------------
 
-    private static String version(Context ctx) {
+    static String version(Context ctx) {
         try {
             PackageInfo pi = ctx.getPackageManager()
                     .getPackageInfo(ctx.getPackageName(), 0);
@@ -296,7 +296,7 @@ final class DiagnosticsPack {
         }
     }
 
-    private static String buildInfo(Context ctx, String ver) {
+    static String buildInfo(Context ctx, String ver) {
         StringBuilder sb = new StringBuilder();
         sb.append("magpie-android 错误诊断包\n");
         // 收集时间只在这里显示（文件名为了兼容邮件/IM 截掉了），精确到秒
@@ -321,7 +321,7 @@ final class DiagnosticsPack {
     }
 
     /** 本包最近的 crash 日志；没有 root/adb 权限时返回提示。 */
-    private static String crashLog() {
+    static String crashLog() {
         try {
             Process p = new ProcessBuilder("logcat", "-b", "crash", "-d", "-t", "400")
                     .redirectErrorStream(true).start();
@@ -458,7 +458,7 @@ final class DiagnosticsPack {
         return new String(bos.toByteArray(), StandardCharsets.UTF_8);
     }
 
-    private static String safe(String s) {
+    static String safe(String s) {
         if (s == null) {
             return "";
         }
@@ -736,7 +736,7 @@ final class DiagnosticsPack {
     // ==================================================================
 
     /** 已装插件的 spec / 版本 / 开关（不含 options 里的人设文本与密钥）。 */
-    private static String pluginsSafe(Context ctx) {
+    static String pluginsSafe(Context ctx) {
         JSONObject out = new JSONObject();
         try {
             File f = new File(GatewayService.dataDir(ctx), "plugins.json");
@@ -784,7 +784,7 @@ final class DiagnosticsPack {
      * 注册的工具、Bun 版本。这里只取这几项，剥掉模型列表详情（体积大）
      * 与任何凭据。
      */
-    private static String pluginsStateSafe(Context ctx) {
+    static String pluginsStateSafe(Context ctx) {
         try {
             MagpieApi.Result r = MagpieApi.get(ctx, "/api/plugins", 8000, 60000);
             if (!r.ok()) {
@@ -985,7 +985,7 @@ final class DiagnosticsPack {
     // ==================================================================
 
     /** data 目录结构与大小：找异常膨胀的缓存、日志、会话记录。 */
-    private static String filesTree(Context ctx) {
+    static String filesTree(Context ctx) {
         StringBuilder sb = new StringBuilder();
         sb.append("# magpie data 目录（两层，> 1MB 的才列，按大小排序）\n\n");
         try {
@@ -1116,7 +1116,7 @@ final class DiagnosticsPack {
     }
 
     /** magpie 子进程的环境变量（代理/地址/时区），值里的凭据打码。 */
-    private static String envSafe() {
+    static String envSafe() {
         StringBuilder sb = new StringBuilder();
         sb.append("# magpie 内核进程的环境变量（凭据打码）\n\n");
         try {
@@ -1150,7 +1150,7 @@ final class DiagnosticsPack {
     }
 
     /** magpie / bun 的资源占用：线程数、CPU 时间、fd 数、内存。 */
-    private static String procStats() {
+    static String procStats() {
         StringBuilder sb = new StringBuilder();
         sb.append("# 进程资源占用\n\n");
         try {
@@ -1276,7 +1276,7 @@ final class DiagnosticsPack {
     }
 
     /** 电源与冻结状态：wake lock、cgroup 冻结、进程优先级。 */
-    private static String batteryState() {
+    static String batteryState() {
         StringBuilder sb = new StringBuilder();
         sb.append("# 电源与冻结状态\n\n");
         sb.append("== dumpsys power（wake lock 摘要）==\n");

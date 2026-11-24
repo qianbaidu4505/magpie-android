@@ -211,6 +211,7 @@ public class GatewayService extends Service {
             ready = false;
             starting = false;
         }
+        DiagServer.stop();
         LocalProxy.stop();
         try {
             ctx.stopService(new Intent(ctx, GatewayService.class));
@@ -361,6 +362,9 @@ public class GatewayService extends Service {
             process = p;
             starting = false;
         }
+
+        // 诊断端口跟着内核走：内核在，端口就在（AI 排查用，见 DiagServer 注释）
+        DiagServer.ensure(ctx);
 
         acquireWakeLock(ctx);
 

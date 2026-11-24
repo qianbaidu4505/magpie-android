@@ -727,7 +727,7 @@ public class NativeHome extends Activity {
         // 第一组就是「打开控制后台」——最常用的一条，压在最上面，不用翻。
         final String[] groups = {"控制台", "网关", "插件", "更新", "其他"};
         final String[][] titles = {
-                {"赞赏作者", "打开控制后台", "错误诊断"},
+                {"赞赏作者", "打开控制后台", "错误诊断", "AI 排查端口"},
                 {"重启网关", "查看日志", "复制网关地址", "忽略电池优化"},
                 {"导入本地插件", "粘贴 Marvis 登录回调", "文件管理器", "省电策略实验室", "缓存清理"},
                 {"检查 magpie 更新", "检查 App 更新", "更新设置"},
@@ -737,6 +737,7 @@ public class NativeHome extends Activity {
                 {"微信赞赏码 + 支付宝收款码；纯属自愿，不构成任何服务承诺",
                         "magpie 自己的完整网页界面：插件、脱敏、同步备份都在这里",
                         "收集全局现场：日志、插件加载错误、流量归属、外部连接、进程资源，发作者排查"},
+                {"本机开一个诊断端口，手机上的 AI 软件或电脑都能直接连上来查"},
                 {"先停再起，改过密钥或配置后用得上",
                         "网关最后写下的三百行输出", "把 …:3425/v1 复制到剪贴板",
                         "让系统不要在熄屏后冻结网关"},
@@ -753,7 +754,7 @@ public class NativeHome extends Activity {
                         "官方仓库、移植作者与许可证"},
         };
         final String[][] icons = {
-                {"\u2661", "\u2699", "\u2691"},
+                {"\u2661", "\u2699", "\u2691", "\u2318"},
                 {"\u27f3", "\u25a4", "\u29c9", "\u26a1"},
                 {"\u2913", "\u270e", "\u25a4", "\u26a1", "\u267b"},
                 {"\u21e9", "\u2b07", "\u2699"},
@@ -877,8 +878,10 @@ public class NativeHome extends Activity {
                     showDonate();
                 } else if (index == 1) {
                     openWebUi();
-                } else {
+                } else if (index == 2) {
                     confirmAndDiagnose();
+                } else {
+                    showDiagPort();
                 }
                 break;
             case 1: // 网关
@@ -1301,6 +1304,121 @@ public class NativeHome extends Activity {
      * 先弹确认（耗时 + 隐私脱敏说明），确认后带百分比进度条收集，
      * 完成后弹三选项（取消 / 保存本地 / 发送至作者邮箱）。
      */
+    /**
+     * AI 排查端口：用法弹窗。
+     *
+     * <p>为什么做成弹窗而不是直接开端口：端口的 key 用户不知道的话
+     * 外部也连不上，所以第一步永远是把「地址 + key」展示/复制给用户；
+     * 顺手把用法写给不会用的人 —— 或者整条地址丢给 AI，让 AI 自己连。
+     */
+    private void showDiagPort() {
+        DiagServer.ensure(this); // 没起就先起（内核活着的话）
+        int port = DiagServer.runningPort();
+        String key = Prefs.webKey(this);
+        String host = Prefs.lan(this) ? lanIp() : "127.0.0.1";
+        String base = port > 0
+                ? "http://" + host + ":" + port
+                : "http://127.0.0.1:" + DiagServer.PORT;
+        String addr = base + "/pack?key=" + key;
+
+        LinearLayout box = ui.column();
+        int pad = ui.dp(18);
+        box.setPadding(pad, ui.dp(6), pad, ui.dp(4));
+
+        TextView t1 = ui.text("这是给 AI 软件看的现场端口：手机上的 AI 助手"
+                        + "（或电脑上的 AI）连上来，就能自己读 magpie 的日志、"
+                        + "崩溃记录、插件状态，不用你截图描述。",
+                13, M3.ON_SURFACE, false);
+        t1.setLineSpacing(ui.dp(2), 1f);
+        t1.setLayoutParams(ui.matchWrap(8));
+        box.addView(t1);
+
+        TextView t2 = ui.text("会用的（AI 软件支持自定义地址）：", 13,
+                M3.ON_SURFACE, true);
+        t2.setPadding(0, ui.dp(10), 0, ui.dp(2));
+        box.addView(t2);
+
+        TextView steps = ui.text("1. 在 AI 软件里让它「访问下面这个地址」\n"
+                        + "2. 把地址发给它，AI 自己 curl 读取\n"
+                        + "3. 然后 AI 会直接告诉你 magpie 哪里出了问题",
+                12.5f, M3.ON_SURFACE_VARIANT, false);
+        steps.setLineSpacing(ui.dp(2), 1f);
+        steps.setLayoutParams(ui.matchWrap(8));
+        box.addView(steps);
+
+        TextView t3 = ui.text("不会用的（最简单）：", 13, M3.ON_SURFACE, true);
+        t3.setPadding(0, ui.dp(10), 0, ui.dp(2));
+        box.addView(t3);
+
+        TextView t4 = ui.text("点下面的「复制地址」，把整条粘给 AI 软件对话里，"
+                        + "加一句「帮我排查 magpie 的问题」就行。剩下的 AI 自己来。",
+                12.5f, M3.ON_SURFACE_VARIANT, false);
+        t4.setLineSpacing(ui.dp(2), 1f);
+        t4.setLayoutParams(ui.matchWrap(10));
+        box.addView(t4);
+
+        // 地址卡片
+        TextView addrBox = new TextView(this);
+        addrBox.setText(addr);
+        addrBox.setTextSize(11);
+        addrBox.setTypeface(android.graphics.Typeface.MONOSPACE);
+        addrBox.setTextColor(ui.col(M3.ON_SURFACE));
+        GradientDrawable ab = ui.round(ui.col(M3.SURFACE_CONTAINER_HIGHEST), 12);
+        addrBox.setBackground(ab);
+        addrBox.setPadding(ui.dp(12), ui.dp(10), ui.dp(12), ui.dp(10));
+        addrBox.setTextIsSelectable(true);
+        LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        alp.setMargins(0, ui.dp(10), 0, 0);
+        box.addView(addrBox, alp);
+
+        // 局域网提示
+        if (Prefs.lan(this)) {
+            TextView lan = ui.text("已开放局域网：同一 Wi-Fi 下的设备都能连这个端口"
+                            + "（地址里的 key 就是密码，别发到公开群）。",
+                    11.5f, M3.ON_SURFACE_VARIANT, false);
+            lan.setPadding(0, ui.dp(8), 0, 0);
+            box.addView(lan);
+        }
+
+        android.app.AlertDialog dlg = new android.app.AlertDialog.Builder(this)
+                .setTitle("AI 排查端口")
+                .setView(box)
+                .setPositiveButton("复制地址", (d, w) -> {
+                    ClipboardManager cm =
+                            (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                    if (cm != null) {
+                        cm.setPrimaryClip(ClipData.newPlainText("magpie", addr));
+                    }
+                    toast("已复制，粘给 AI 软件就能开始排查");
+                })
+                .setNegativeButton("关闭", null)
+                .setCancelable(true)
+                .create();
+        styleDialog(dlg);
+        dlg.show();
+    }
+
+    /** 局域网里本机的 IPv4（开「允许局域网访问」时弹窗地址用它）。 */
+    private String lanIp() {
+        try {
+            java.util.Enumeration<java.net.NetworkInterface> nis =
+                    java.net.NetworkInterface.getNetworkInterfaces();
+            while (nis != null && nis.hasMoreElements()) {
+                java.util.Enumeration<java.net.InetAddress> addrs =
+                        nis.nextElement().getInetAddresses();
+                while (addrs.hasMoreElements()) {
+                    java.net.InetAddress a = addrs.nextElement();
+                    if (!a.isLoopbackAddress() && a instanceof java.net.Inet4Address) {
+                        return a.getHostAddress();
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return "127.0.0.1";
+    }
+
     private void confirmAndDiagnose() {
         android.app.AlertDialog dlg = new android.app.AlertDialog.Builder(this)
                 .setTitle("错误诊断")
