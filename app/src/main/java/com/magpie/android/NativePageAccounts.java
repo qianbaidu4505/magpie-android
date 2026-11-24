@@ -311,22 +311,36 @@ final class NativePageAccounts extends NativePage {
         Map<String, Boolean> sw = Checkins.switches(checkinState);
         android.widget.ScrollView sc = new android.widget.ScrollView(host);
         LinearLayout list = ui.column();
+        // 顺序：内置四家恒列，然后是 pluginCheckins / checkinPlugins 里出现的插件型
         java.util.List<String> order = new java.util.ArrayList<>();
         for (int i = 0; i < Checkins.BUILTIN.length; i++) {
             order.add(Checkins.BUILTIN[i][0]);
         }
-        for (String k : sw.keySet()) {
-            if (k.startsWith("plugin:") && !order.contains(k)) {
-                order.add(k);
+        java.util.List<String> pluginOnly = new java.util.ArrayList<>();
+        JSONObject st = checkinState.optJSONObject("settings");
+        JSONObject pcMap = st == null ? null : st.optJSONObject("pluginCheckins");
+        if (pcMap != null) {
+            java.util.Iterator<String> it = pcMap.keys();
+            while (it.hasNext()) {
+                String id = it.next();
+                String key = "plugin:" + id;
+                // 内置四家对应的插件层 id 不重复列（它们已由供应商级那行代表）
+                if (!isInheritedPluginId(id) && !order.contains(key)) {
+                    pluginOnly.add(key);
+                }
             }
         }
+        for (String k : sw.keySet()) {
+            if (k.startsWith("plugin:") && !order.contains(k) && !pluginOnly.contains(k)) {
+                pluginOnly.add(k);
+            }
+        }
+        order.addAll(pluginOnly);
         final Map<String, android.widget.Switch> live = new LinkedHashMap<>();
         for (String vendor : order) {
             Boolean on = sw.get(vendor);
-            if (on == null && vendor.startsWith("plugin:")) {
-                continue; // 没报上来的插件不放
-            }
             if (on == null) {
+                // 内置四家从 switches 一定有值；插件型没值就当关
                 on = false;
             }
             String name = vendor.startsWith("plugin:")
@@ -402,6 +416,19 @@ final class NativePageAccounts extends NativePage {
             }
         }
         return true;
+    }
+
+    /** 这个插件 provider id 是不是内置四家某个变体（弹层里不重复列）。 */
+    private static boolean isInheritedPluginId(String id) {
+        for (String[] m : new String[][]{
+                {"workbuddy", "workbuddy"}, {"trae", "trae-cn"},
+                {"minimax", "minimax-code"}, {"minimax", "minimax-code-global"},
+                {"qoder", "qoder"}, {"qoder", "qoder-cn"}}) {
+            if (m[1].equals(id)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String vendorTitle(String vendor) {

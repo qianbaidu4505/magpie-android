@@ -39,6 +39,13 @@ final class WhatsNew {
     private static final android.util.SparseArray<String[]> NOTES = new android.util.SparseArray<>();
 
     static {
+        // 195 / 1.8.15
+        NOTES.put(195, new String[]{
+                "修复",
+                "• 壳读签到开关改为「有效值」：插件层显式值优先（对齐 magpie 自己的 PluginCheckinOn），网页关掉下面那行，壳这边立刻跟着变",
+                "• 弹层补齐插件型供应商的签到开关（之前只显示内置四家）",
+                "• 供应商卡签到按钮不再因为账号清单读空而消失",
+        });
         // 194 / 1.8.14
         NOTES.put(194, new String[]{
                 "修复",

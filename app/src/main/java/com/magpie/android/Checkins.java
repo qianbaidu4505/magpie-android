@@ -76,6 +76,40 @@ final class Checkins {
         }
     }
 
+    /** 内置 vendor 对应的插件层 provider id 列表（读有效值/写双层共用）。 */
+    static String[] inheritedIdsOf(String vendor) {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        for (String[] m : INHERITED_PLUGIN_IDS) {
+            if (m[0].equals(vendor)) {
+                out.add(m[1]);
+            }
+        }
+        return out.toArray(new String[0]);
+    }
+
+    /** 这家供应商有没有签到能力（内置四家，或插件层里出现过）。 */
+    static boolean isCheckinVendor(JSONObject state, String providerId) {
+        String vendor = vendorOf(providerId);
+        if (builtinApi(vendor) != null) {
+            return true;
+        }
+        JSONObject st = state.optJSONObject("settings");
+        JSONObject pc = st == null ? null : st.optJSONObject("pluginCheckins");
+        if (pc != null && pc.has(vendor.substring("plugin:".length()))) {
+            return true;
+        }
+        JSONArray ps = state.optJSONArray("checkinPlugins");
+        if (ps != null) {
+            for (int i = 0; i < ps.length(); i++) {
+                JSONObject p = NativeData.at(ps, i);
+                if (p != null && vendor.equals("plugin:" + NativeData.str(p, "id", ""))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     /** 内置 vendor 的 API 名（workbuddy/trae/minimax/qoder → 同名；plugin 型返回 null）。 */
     static String builtinApi(String vendor) {
         for (String[] b : BUILTIN) {
@@ -125,7 +159,8 @@ final class Checkins {
                 }
             }
             if (arr == null || arr.length() == 0) {
-                return "none";
+                // 没有记录：内置四家当作「今天还没签」，插件型才判 none
+                return api != null ? "due" : "none";
             }
             for (int i = 0; i < arr.length(); i++) {
                 JSONObject c = NativeData.at(arr, i);
@@ -175,17 +210,34 @@ final class Checkins {
         return null;
     }
 
-    /** 读自动签到开关（内置四家 + 插件型）。返回 {vendor: on}。 */
+    /**
+     * 读自动签到开关（内置四家 + 插件型），**有效值**。
+     *
+     * <p>对齐上游 {@code PluginCheckinOn} 的优先级：插件层的显式值
+     * （settings.pluginCheckins["trae-cn"] 这类）**优先于**供应商级
+     * （settings.traeCheckin）。网页 provider 详情里那两行是两个独立开关，
+     * 用户关掉下面那行（插件层）时上面那行（供应商级）不变——壳如果只读
+     * 供应商级，就会「网页关了壳没反应」。所以这里按有效值读。
+     */
     static Map<String, Boolean> switches(JSONObject state) {
         Map<String, Boolean> out = new LinkedHashMap<>();
         try {
             JSONObject st = state.optJSONObject("settings");
+            JSONObject pc = st == null ? null : st.optJSONObject("pluginCheckins");
             for (String[] b : BUILTIN) {
                 String key = b[0] + "Checkin";
                 boolean on = st != null && st.optBoolean(key, false);
+                // 插件层显式值优先（内置四家对应的插件 provider id）
+                if (pc != null) {
+                    String[] ids = inheritedIdsOf(b[0]);
+                    for (String id : ids) {
+                        if (pc.has(id)) {
+                            on = pc.optBoolean(id, on);
+                        }
+                    }
+                }
                 out.put(b[0], on);
             }
-            JSONObject pc = st == null ? null : st.optJSONObject("pluginCheckins");
             JSONArray ps = state.optJSONArray("checkinPlugins");
             if (ps != null) {
                 for (int i = 0; i < ps.length(); i++) {
@@ -277,7 +329,15 @@ final class Checkins {
         return r.ok() ? null : r.why();
     }
 
-    /** 这家有没有能签的账号（checkinAccounts 里它的 by=vendor 有记录）。 */
+    /**
+     * 这家有没有能签的账号。
+     *
+     * <p>判定顺序：① checkinAccounts 里有它的账号（正常情况）→ 有；
+     * ② 内置四家（WorkBuddy/Trae/MiniMax/Qoder）即使账号清单读空也算有
+     * ——上游 checkinAccounts 要求账号已登录且供应商在线，读空时不该让
+     * 整个签到按钮消失（爸爸 2026-11-24 实测：checkinAccounts 为空，
+     * 卡片上就什么按钮都没有了）。
+     */
     static boolean hasAccounts(JSONObject state, String providerId) {
         String vendor = vendorOf(providerId);
         JSONArray arr = state.optJSONArray("checkinAccounts");
@@ -300,6 +360,7 @@ final class Checkins {
                 return true;
             }
         }
-        return false;
+        // 清单读空时的兜底：内置四家照样给签到按钮
+        return builtinApi(vendor) != null;
     }
 }
