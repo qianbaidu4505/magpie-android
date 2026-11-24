@@ -10,6 +10,7 @@ import android.provider.DocumentsContract;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -211,19 +212,46 @@ final class FileManager {
         }
         // 文件：复制路径 / 重命名 / 删除
         final String[] actions = {"复制绝对路径", "重命名", "删除"};
-        new AlertDialog.Builder(act)
-                .setTitle(f.getName())
-                .setItems(actions, (d, which) -> {
-                    if (which == 0) {
-                        copyToClipboard(act, f.getAbsolutePath());
-                    } else if (which == 1) {
-                        rename(act, ui, f);
-                    } else {
-                        confirmDelete(act, ui, f);
-                    }
-                })
-                .setNegativeButton(android.R.string.cancel, null)
-                .show();
+        // 卡片式底部弹层（与全 App 弹窗样式统一）
+        android.app.Dialog dlg = new android.app.Dialog(act, R.style.Theme_Magpie_Sheet);
+        LinearLayout root = ui.column();
+        GradientDrawable bg = ui.round(ui.col(M3.SURFACE_CONTAINER_LOW), 28);
+        bg.setCornerRadii(new float[]{
+                ui.dp(28), ui.dp(28), ui.dp(28), ui.dp(28), 0, 0, 0, 0});
+        root.setBackground(bg);
+        root.setPadding(ui.dp(16), ui.dp(14), ui.dp(16),
+                ui.dp(16) + MainActivity.barHeightOf(act, "navigation_bar_height"));
+
+        root.addView(ui.text(f.getName(), 19, M3.ON_SURFACE, true));
+
+        Runnable[] runs = {
+                () -> copyToClipboard(act, f.getAbsolutePath()),
+                () -> rename(act, ui, f),
+                () -> confirmDelete(act, ui, f),
+        };
+        for (int i = 0; i < actions.length; i++) {
+            final Runnable run = runs[i];
+            TextView row = ui.text(actions[i], 15, M3.ON_SURFACE, false);
+            row.setPadding(ui.dp(12), ui.dp(13), ui.dp(12), ui.dp(13));
+            GradientDrawable rbg = ui.roundStroke(ui.col(M3.SURFACE_CONTAINER_LOW),
+                    14, ui.col(M3.OUTLINE_VARIANT), 1);
+            ui.clickable(row, rbg);
+            LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            rlp.setMargins(0, 0, 0, ui.dp(6));
+            row.setOnClickListener(v -> {
+                dlg.dismiss();
+                run.run();
+            });
+            root.addView(row, rlp);
+        }
+        dlg.setContentView(root);
+        android.view.Window w = dlg.getWindow();
+        if (w != null) {
+            w.setBackgroundDrawableResource(android.R.color.transparent);
+            w.setGravity(android.view.Gravity.BOTTOM);
+        }
+        dlg.show();
     }
 
     private static View row(final Activity act, final Ui ui, String name, String size,

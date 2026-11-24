@@ -180,12 +180,13 @@ final class NativePageMasking extends NativePage {
             }
             more = recJson != null && recJson.optBoolean("more", false);
             final boolean fOn = on;
+            final JSONObject fSettings = s == null ? null : s.optJSONObject("settings");
             final String sumWhy = sum.ok() ? null : sum.why();
             final String recWhy = recs.ok() ? null : recs.why();
             host.post(() -> {
                 rebuildKeepingScroll(() -> {
                     content.removeAllViews();
-                    content.addView(summaryCard(fSum, fOn, sumWhy));
+                    content.addView(summaryCard(fSum, fOn, sumWhy, fSettings));
                     content.addView(modelCard(pm));
                     content.addView(recordsCard(fRecs, recWhy));
                 });
@@ -409,7 +410,8 @@ final class NativePageMasking extends NativePage {
     // 汇总卡
     // ------------------------------------------------------------------
 
-    private View summaryCard(JSONObject sum, boolean on, String why) {
+    private View summaryCard(JSONObject sum, boolean on, String why,
+                             JSONObject maskSettings) {
         LinearLayout card = ui.cardWithMargin();
         LinearLayout body = ui.column();
         card.addView(body);
@@ -436,9 +438,21 @@ final class NativePageMasking extends NativePage {
         sub.setLayoutParams(ui.matchWrap(4));
         titles.addView(sub);
         head.addView(titles, ui.weight(1));
-        head.addView(ui.pill(on ? "已开启" : "已关闭",
+        // 「已开启/已关闭」胶囊 = 一键总开关：点击切换 settings.redact（密钥脱敏主开关），
+        // 整份 settings 原样回传只改这一个字段（与内核网页 savePrefs 一致）
+        TextView toggle = ui.pill(on ? "已开启" : "已关闭",
                 on ? M3.TERTIARY_CONTAINER : M3.SURFACE_CONTAINER_HIGH,
-                on ? M3.ON_TERTIARY_CONTAINER : M3.ON_SURFACE));
+                on ? M3.ON_TERTIARY_CONTAINER : M3.ON_SURFACE);
+        if (maskSettings != null) {
+            toggle.setOnClickListener(v -> {
+                toggle.setEnabled(false);
+                toggle.setText("保存中…");
+                boolean next = !NativeData.flag(maskSettings, "redact");
+                saveMaskPrefs(maskSettings, "redact", next, toggle);
+                toggle.setEnabled(true);
+            });
+        }
+        head.addView(toggle);
         body.addView(head);
 
         // 标题旁的「脱敏设置」入口：点开设置面板（开关 + 脱敏词）
@@ -924,19 +938,60 @@ final class NativePageMasking extends NativePage {
                 vals.add(name);
             }
         }
-        new AlertDialog.Builder(host)
-                .setTitle(kind.equals("agent") ? "选择智能体" : "选择提供方")
-                .setItems(names.toArray(new String[0]), (d, which) -> {
-                    String v = which < vals.size() ? vals.get(which) : "";
-                    if (kind.equals("agent")) {
-                        filterAgent = v;
-                    } else {
-                        filterProvider = v;
-                    }
-                    refresh(true);
-                })
-                .setNegativeButton("关闭", null)
-                .create().show();
+        // 卡片式底部弹层（统一走 Ui.dialogBg 同款样式，不用系统 setItems 白板）
+        android.app.Dialog dlg = new android.app.Dialog(host, R.style.Theme_Magpie_Sheet);
+        LinearLayout root = ui.column();
+        GradientDrawable bg = ui.round(ui.col(M3.SURFACE_CONTAINER_LOW), 28);
+        bg.setCornerRadii(new float[]{
+                ui.dp(28), ui.dp(28), ui.dp(28), ui.dp(28), 0, 0, 0, 0});
+        root.setBackground(bg);
+        root.setPadding(ui.dp(16), ui.dp(14), ui.dp(16),
+                ui.dp(16) + MainActivity.barHeightOf(host, "navigation_bar_height"));
+
+        root.addView(ui.text(kind.equals("agent") ? "选择智能体" : "选择提供方",
+                21, M3.ON_SURFACE, true));
+
+        android.widget.ScrollView sc = new android.widget.ScrollView(host);
+        LinearLayout list = ui.column();
+        for (int i = 0; i < names.size(); i++) {
+            final String v = i < vals.size() ? vals.get(i) : "";
+            String label = names.get(i);
+            boolean selected = (kind.equals("agent") ? filterAgent : filterProvider).equals(v);
+            TextView row = ui.text(label, 15,
+                    selected ? M3.PRIMARY : M3.ON_SURFACE, selected);
+            row.setPadding(ui.dp(12), ui.dp(13), ui.dp(12), ui.dp(13));
+            GradientDrawable rbg = ui.roundStroke(
+                    selected ? ui.col(M3.PRIMARY_CONTAINER) : ui.col(M3.SURFACE_CONTAINER_LOW),
+                    14, ui.col(M3.OUTLINE_VARIANT), 1);
+            ui.clickable(row, rbg);
+            LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            rlp.setMargins(0, 0, 0, ui.dp(6));
+            row.setOnClickListener(vv -> {
+                dlg.dismiss();
+                if (kind.equals("agent")) {
+                    filterAgent = v;
+                } else {
+                    filterProvider = v;
+                }
+                refresh(true);
+            });
+            list.addView(row, rlp);
+        }
+        sc.addView(list);
+        root.addView(sc, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, host.ui.dp(360)));
+
+        dlg.setContentView(root);
+        android.view.Window w = dlg.getWindow();
+        if (w != null) {
+            w.setBackgroundDrawableResource(android.R.color.transparent);
+            w.setGravity(Gravity.BOTTOM);
+            int maxH = (int) (host.getResources().getDisplayMetrics().heightPixels * 0.82f);
+            w.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                    Math.min(maxH, host.getResources().getDisplayMetrics().heightPixels));
+        }
+        dlg.show();
     }
 
     /** summary 里 agents/providers 数组。 */

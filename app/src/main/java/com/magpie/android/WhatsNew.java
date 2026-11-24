@@ -39,6 +39,14 @@ final class WhatsNew {
     private static final android.util.SparseArray<String[]> NOTES = new android.util.SparseArray<>();
 
     static {
+        // 189 / 1.8.9
+        NOTES.put(189, new String[]{
+                "新功能",
+                "• 脱敏页「已开启」胶囊变成一键总开关：点击直接切换密钥脱敏",
+                "• 脱敏筛选、文件操作、更新镜像的选择弹窗改成卡片式（带边框底色）",
+                "• 账号页签到：头部「自动签到」入口 + 每家供应商卡片右侧「签到」按钮",
+                "• 版本更新弹窗（就是你现在看到的这个）",
+        });
         // 188 / 1.8.8
         NOTES.put(188, new String[]{
                 "新功能",
