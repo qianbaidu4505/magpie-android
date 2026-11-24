@@ -141,6 +141,9 @@ public class NativeHome extends Activity {
         }
         selectTab(tab, true);
 
+        // 版本更新弹窗：升级过来就弹一次（排在保活引导之前，用户最先看到）
+        uiHandler.postDelayed(() -> WhatsNew.maybeShow(this), 1200);
+
         // 后台保活引导（通知权限 / 电池优化 / 厂商自启动）和两个自动检查
         // 跟旧壳一致，只是延后一点，别和首屏渲染抢主线程
         uiHandler.postDelayed(() -> BackgroundGuide.maybeShowOnLaunch(this), 2500);
@@ -975,6 +978,11 @@ public class NativeHome extends Activity {
         }
     }
 
+    /** 给 NativePage 系用的弹窗样式入口（同 {@link #styleDialog}）。 */
+    void styleDialogPublic(android.app.AlertDialog dlg) {
+        styleDialog(dlg);
+    }
+
     private void styleDialog(AlertDialog dlg) {
         try {
             if (dlg.getWindow() != null) {
@@ -1073,6 +1081,11 @@ public class NativeHome extends Activity {
         AlertDialog dlg = b.create();
         styleDialog(dlg);
         dlg.show();
+    }
+
+    /** 给 NativePage 系用的 toast 入口。 */
+    void toastPublic(String s) {
+        toast(s);
     }
 
     private void toast(String s) {

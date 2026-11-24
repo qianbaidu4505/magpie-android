@@ -1,0 +1,153 @@
+package com.magpie.android;
+
+import android.app.AlertDialog;
+import android.content.Context;
+import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.view.Gravity;
+import android.view.ViewGroup;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.TextView;
+
+import android.graphics.drawable.GradientDrawable;
+
+/**
+ * 「版本更新后弹窗说明更新内容」。
+ *
+ * <p>实现：本版更新说明写死在 {@link #NOTES}（按 versionCode 索引）；
+ * 首次启动（NativeHome onCreate）时比较当前 versionCode 和 prefs 里记的
+ * 「上次弹过的 versionCode」，升级过（更大）就弹一次，弹完记下。
+ * 降级/重装不弹（code 更小或相等）。用户点「不再显示」也记下，本版不再弹。
+ *
+ * <p>发新版时只要往 {@link #NOTES} 里加一条新 versionCode 的说明即可。
+ */
+final class WhatsNew {
+
+    private static final String PREF = "whatsnew";
+    private static final String KEY_SHOWN = "shownCode";
+
+    private WhatsNew() {
+    }
+
+    /**
+     * 每版的更新说明。key = versionCode。
+     * <p>发版纪律：新版本的说明要在构建前就加进来（改这里的同事改
+     * app/build.gradle 的 versionCode）。
+     */
+    private static final android.util.SparseArray<String[]> NOTES = new android.util.SparseArray<>();
+
+    static {
+        // 188 / 1.8.8
+        NOTES.put(188, new String[]{
+                "新功能",
+                "• 账号页新增「自动签到」：每家供应商一个开关，打开后 magpie 每天自动签到领积分",
+                "• 供应商卡片右侧新增「签到」按钮：今天没签的一键签到，签完变「已签到」",
+                "• 版本更新弹窗（就是你现在看到的这个）",
+                "内核",
+                "• 内核升级到上游 v0.1.4738（官方 Android 构建，落后一年多的更新一次补齐）",
+                "样式",
+                "• 全部弹窗统一为卡片样式：玻璃白底 + 主色发光描边，按钮改主色描边胶囊",
+        });
+        // 186 / 1.8.6
+        NOTES.put(186, new String[]{
+                "新功能",
+                "• AI 排查端口：菜单 → 控制台 → AI 排查端口，把地址粘给 AI 软件即可自动排查问题",
+                "• 弹窗与按钮全面卡片化",
+        });
+    }
+
+    /**
+     * 首页 onCreate 时调：升级过来就弹一次。
+     *
+     * @return true 弹了（或正在弹），false 无需弹
+     */
+    static boolean maybeShow(NativeHome host) {
+        int code = versionCode(host);
+        if (code <= 0) {
+            return false;
+        }
+        SharedPreferences sp = host.getSharedPreferences(PREF, Context.MODE_PRIVATE);
+        int shown = sp.getInt(KEY_SHOWN, 0);
+        // 只在「升级」时弹：首装（shown==0 且已有多版历史）不弹旧说明，
+        // 降级不弹，重装同版不弹
+        if (shown >= code) {
+            return false;
+        }
+        String[] notes = NOTES.get(code);
+        if (notes == null || notes.length == 0) {
+            // 这版没写说明（比如用户从很老的版本跳过来）也不弹
+            sp.edit().putInt(KEY_SHOWN, code).apply();
+            return false;
+        }
+        // 首装用户（从未记过）不弹——他们没有「升级」的概念
+        if (shown == 0) {
+            sp.edit().putInt(KEY_SHOWN, code).apply();
+            return false;
+        }
+
+        LinearLayout box = new LinearLayout(host);
+        box.setOrientation(LinearLayout.VERTICAL);
+        int pad = (int) (host.getResources().getDisplayMetrics().density * 18);
+        box.setPadding(pad, host.ui.dp(4), pad, host.ui.dp(4));
+
+        TextView ver = host.ui.text("已更新到 " + versionName(host), 16,
+                M3.ON_SURFACE, true);
+        ver.setPadding(0, 0, 0, host.ui.dp(6));
+        box.addView(ver);
+
+        ScrollView sc = new ScrollView(host);
+        LinearLayout list = host.ui.column();
+        int sectionColor = host.ui.col(M3.PRIMARY);
+        for (String line : notes) {
+            boolean isSection = line.startsWith("•") == false;
+            TextView t = new TextView(host);
+            t.setText(line);
+            t.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, isSection ? 13 : 13.5f);
+            t.setTextColor(isSection ? sectionColor : host.ui.col(M3.ON_SURFACE));
+            t.setTypeface(null, isSection ? android.graphics.Typeface.BOLD
+                    : android.graphics.Typeface.NORMAL);
+            t.setLineSpacing(host.ui.dp(2), 1f);
+            t.setPadding(0, host.ui.dp(isSection ? 8 : 2), 0, 0);
+            if (!isSection) {
+                t.setPadding(host.ui.dp(6), 0, 0, 0);
+            }
+            list.addView(t);
+        }
+        sc.addView(list);
+        box.addView(sc, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, host.ui.dp(320)));
+
+        AlertDialog dlg = new AlertDialog.Builder(host)
+                .setTitle("更新说明")
+                .setView(box)
+                .setPositiveButton("开始使用", null)
+                .setCancelable(true)
+                .create();
+        host.styleDialogPublic(dlg);
+        dlg.show();
+        sp.edit().putInt(KEY_SHOWN, code).apply();
+        return true;
+    }
+
+    private static int versionCode(Context ctx) {
+        try {
+            PackageInfo pi = ctx.getPackageManager()
+                    .getPackageInfo(ctx.getPackageName(), 0);
+            return pi.versionCode;
+        } catch (PackageManager.NameNotFoundException e) {
+            return -1;
+        }
+    }
+
+    private static String versionName(Context ctx) {
+        try {
+            PackageInfo pi = ctx.getPackageManager()
+                    .getPackageInfo(ctx.getPackageName(), 0);
+            return pi.versionName == null ? "?" : pi.versionName;
+        } catch (PackageManager.NameNotFoundException e) {
+            return "?";
+        }
+    }
+}

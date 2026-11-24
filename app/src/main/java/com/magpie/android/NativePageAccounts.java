@@ -44,6 +44,11 @@ final class NativePageAccounts extends NativePage {
 
     private final Map<String, String> offProviders = new LinkedHashMap<>();
 
+    /** 签到的 /api/state 快照（开关+今日状态），签到动作后刷新。 */
+    private volatile org.json.JSONObject checkinState;
+    /** 正在签到中的供应商（防止重复点）。 */
+    private final java.util.Set<String> checkinBusy = new java.util.HashSet<>();
+
     /** 最近一次渲染时的全部 provider key 和账号 key，用于「再点一次 tab 全部收起」。 */
     private final List<String> lastProviderKeys = new ArrayList<>();
     private final List<String> lastAccountKeys = new ArrayList<>();
@@ -152,6 +157,12 @@ final class NativePageAccounts extends NativePage {
             }
         }
 
+        // 签到状态：读不到不影响本页（额度照画，签到按钮不出现）
+        MagpieApi.Result cs = MagpieApi.stateLast(host);
+        if (cs.ok() && cs.json() != null) {
+            checkinState = cs.json();
+        }
+
         host.post(() -> {
             // 开关状态先落地，accountRow 建卡片时要用
             onState.clear();
@@ -235,8 +246,129 @@ final class NativePageAccounts extends NativePage {
         row.addView(ui.stat(String.valueOf(accounts), "个账号", M3.ON_SURFACE, 1f));
         row.addView(ui.stat(String.valueOf(providers), "家供应商", M3.ON_SURFACE, 1f));
         row.addView(ui.stat(String.valueOf(offProviders.size()), "家已关闭", M3.ON_SURFACE, 1f));
+
+        // 第四格：自动签到入口（点开弹每家开关的弹层）
+        TextView checkin = ui.text("签到", 20, M3.PRIMARY, true);
+        checkin.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        clp.gravity = Gravity.CENTER;
+        checkin.setLayoutParams(clp);
+        checkin.setOnClickListener(v -> showCheckinSheet());
+        TextView sub = new TextView(host);
+        sub.setText("自动签到 ›");
+        sub.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 12);
+        sub.setTextColor(ui.col(M3.ON_SURFACE_VARIANT));
+        sub.setGravity(Gravity.CENTER);
+        sub.setLayoutParams(new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        LinearLayout half = new LinearLayout(host);
+        half.setOrientation(LinearLayout.VERTICAL);
+        half.setGravity(Gravity.CENTER);
+        half.addView(checkin);
+        half.addView(sub);
+        half.setOnClickListener(v -> showCheckinSheet());
+        row.addView(half,
+                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
         card.addView(row);
         return card;
+    }
+
+    /**
+     * 自动签到弹层：每家供应商一个开关行。
+     *
+     * <p>上游没有总开关，每家各自一个（内置四家 + 插件型）。这里列出的
+     * 是「有账号可签」的：内置四家恒列（开关本来就要有地方放），插件型
+     * 只列 checkinPlugins 里报上来的。
+     */
+    private void showCheckinSheet() {
+        if (checkinState == null) {
+            host.toastPublic("读不到签到状态，稍后再试");
+            return;
+        }
+        LinearLayout box = ui.column();
+        int pad = ui.dp(18);
+        box.setPadding(pad, ui.dp(8), pad, ui.dp(6));
+
+        TextView tip = ui.text("打开后 magpie 每天自动帮这家账号签到领积分；"
+                        + "也可以在下面的供应商卡片上手动点「签到」。",
+                12, M3.ON_SURFACE_VARIANT, false);
+        tip.setLineSpacing(ui.dp(2), 1f);
+        tip.setLayoutParams(ui.matchWrap(10));
+        box.addView(tip);
+
+        Map<String, Boolean> sw = Checkins.switches(checkinState);
+        android.widget.ScrollView sc = new android.widget.ScrollView(host);
+        LinearLayout list = ui.column();
+        java.util.List<String> order = new java.util.ArrayList<>();
+        for (int i = 0; i < Checkins.BUILTIN.length; i++) {
+            order.add(Checkins.BUILTIN[i][0]);
+        }
+        for (String k : sw.keySet()) {
+            if (k.startsWith("plugin:") && !order.contains(k)) {
+                order.add(k);
+            }
+        }
+        final Map<String, android.widget.Switch> live = new LinkedHashMap<>();
+        for (String vendor : order) {
+            Boolean on = sw.get(vendor);
+            if (on == null && vendor.startsWith("plugin:")) {
+                continue; // 没报上来的插件不放
+            }
+            if (on == null) {
+                on = false;
+            }
+            String name = vendor.startsWith("plugin:")
+                    ? NativeData.pretty(vendor.substring("plugin:".length()))
+                    : vendorTitle(vendor);
+            android.widget.Switch swv = new android.widget.Switch(host);
+            swv.setText(name);
+            swv.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 14.5f);
+            swv.setTextColor(ui.col(M3.ON_SURFACE));
+            swv.setChecked(on);
+            swv.setPadding(0, ui.dp(10), 0, ui.dp(10));
+            live.put(vendor, swv);
+            swv.setOnCheckedChangeListener((b, checked) -> {
+                swv.setEnabled(false);
+                host.bg(() -> {
+                    JSONObject[] out = {checkinState};
+                    String err = Checkins.setSwitch(host, vendor, checked, out);
+                    host.post(() -> {
+                        swv.setEnabled(true);
+                        if (err != null) {
+                            swv.setChecked(!checked);
+                            host.toastPublic("设不上：" + err);
+                        } else {
+                            checkinState = out[0];
+                            host.toastPublic(name + " 自动签到已" + (checked ? "开启" : "关闭"));
+                        }
+                    });
+                });
+            });
+            list.addView(swv);
+        }
+        sc.addView(list);
+        box.addView(sc, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ui.dp(300)));
+
+        android.app.AlertDialog dlg = new android.app.AlertDialog.Builder(host)
+                .setTitle("自动签到")
+                .setView(box)
+                .setPositiveButton("关闭", null)
+                .setCancelable(true)
+                .create();
+        host.styleDialogPublic(dlg);
+        dlg.show();
+    }
+
+    private static String vendorTitle(String vendor) {
+        for (int i = 0; i < Checkins.BUILTIN.length; i++) {
+            if (Checkins.BUILTIN[i][0].equals(vendor)) {
+                return Checkins.VENDOR_TITLES[i];
+            }
+        }
+        return vendor;
     }
 
     /** 「全部展开 / 全部收起」两个小胶囊，省得一家家点。 */
@@ -605,6 +737,10 @@ final class NativePageAccounts extends NativePage {
             header.addView(ui.pill("已关闭", M3.ERROR_CONTAINER, M3.ON_ERROR_CONTAINER), olp);
         }
 
+        // 签到按钮：这家有可签账号时出现。今天未签=主色「签到」，已签=灰「已签到」。
+        // 点了立即调上游手动签到，完成（含结果提示）后刷新本页。
+        addCheckinButton(header, providerId);
+
         // ---- 二级：账号列表（缩进，一眼能看出是这家的子项）----
         LinearLayout body = ui.column();
         for (JSONObject q : list) {
@@ -615,6 +751,67 @@ final class NativePageAccounts extends NativePage {
         wrap.addView(header);
         wrap.addView(body);
         return wrap;
+    }
+
+    /**
+     * 供应商卡右侧的签到按钮。
+     *
+     * <p>判定链：没读到签到状态 / 这家没有可签账号（checkinAccounts 无记录）→
+     * 不出现；今天已签（outcome claimed/done 且 day=北京时间今天）→ 灰胶囊
+     * 「已签到」；否则主色胶囊「签到」，点了即调 POST /api/usage/&lt;vendor&gt;-checkin
+     * （插件型 /api/usage/plugin-checkin）。结果 toast：成功带签到结果条数，
+     * 失败带原因（captcha/own-app 这些特殊情况上游在 msg 里说）。
+     */
+    private void addCheckinButton(LinearLayout header, String providerId) {
+        if (checkinState == null) {
+            return;
+        }
+        if (!Checkins.hasAccounts(checkinState, providerId)) {
+            return;
+        }
+        String status = Checkins.statusOf(checkinState, providerId);
+        if ("none".equals(status)) {
+            return;
+        }
+        if (checkinBusy.contains(providerId)) {
+            TextView busy = ui.pill("签到中…", M3.SURFACE_CONTAINER_HIGH, M3.ON_SURFACE_VARIANT);
+            LinearLayout.LayoutParams blp = ui.wrap();
+            blp.rightMargin = ui.dp(4);
+            header.addView(busy, blp);
+            return;
+        }
+        if ("done".equals(status)) {
+            TextView done = ui.pill("已签到", M3.SURFACE_CONTAINER_HIGH, M3.ON_SURFACE_VARIANT);
+            LinearLayout.LayoutParams dlp = ui.wrap();
+            dlp.rightMargin = ui.dp(4);
+            header.addView(done, dlp);
+            return;
+        }
+        TextView btn = ui.pill("签到", M3.PRIMARY_CONTAINER, M3.ON_PRIMARY_CONTAINER);
+        LinearLayout.LayoutParams lp = ui.wrap();
+        lp.rightMargin = ui.dp(4);
+        btn.setOnClickListener(v -> {
+            if (checkinBusy.contains(providerId)) {
+                return;
+            }
+            checkinBusy.add(providerId);
+            host.toastPublic("正在签到 " + providerId + " …");
+            host.bg(() -> {
+                JSONObject[] out = {checkinState};
+                String err = Checkins.checkinNow(host, providerId, out);
+                host.post(() -> {
+                    checkinBusy.remove(providerId);
+                    if (err != null) {
+                        host.toastPublic("签到失败：" + err);
+                    } else {
+                        checkinState = out[0];
+                        host.toastPublic("签到完成");
+                        refresh(true);
+                    }
+                });
+            });
+        });
+        header.addView(btn, lp);
     }
 
     /** 图标在标题行里的布局参数。 */
