@@ -211,25 +211,57 @@ final class Checkins {
         return out;
     }
 
-    /** 设自动签到开关。返回 null=成功。 */
+    /**
+     * 内置 vendor → 它在网页「供应商设置」里的插件层 id（上游
+     * PLUGIN_CHECKIN_INHERITS 的反向：那些行的开关就是 pluginCheckins[id]）。
+     *
+     * <p>为什么要有这张表：Trae CN 这类供应商有**两层**开关——供应商级
+     * （settings.traeCheckin）和插件层（settings.pluginCheckins["trae-cn"]）。
+     * 上游的继承规则是「插件层没显式设置时跟供应商层」，网页 UI 里两层是
+     * 两行独立开关。壳只写供应商级的话，网页里那行（如果用户曾碰过它，
+     * 显式值优先）看起来完全没反应——就是爸爸碰到的「双向都不同步」。
+     * 所以壳切内置四家的开关时**两层一起写**，保证任何一处看都一致。
+     */
+    private static final String[][] INHERITED_PLUGIN_IDS = {
+            {"workbuddy", "workbuddy"},
+            {"trae", "trae-cn"},
+            {"minimax", "minimax-code"},
+            {"minimax", "minimax-code-global"},
+            {"qoder", "qoder"},
+            {"qoder", "qoder-cn"},
+    };
+
+    /** 设自动签到开关。返回 null=成功。内置四家会两层（供应商级+插件层）一起写。 */
     static String setSwitch(Context ctx, String vendor, boolean on, JSONObject[] stateOut) {
         try {
-            String path;
-            String body;
+            String err = null;
             if (vendor.startsWith("plugin:")) {
-                path = "/api/settings/plugin-checkin";
-                body = new JSONObject()
-                        .put("provider", vendor.substring("plugin:".length()))
-                        .put("on", on).toString();
+                err = postCheckinSwitch(ctx, "/api/settings/plugin-checkin",
+                        new JSONObject()
+                                .put("provider", vendor.substring("plugin:".length()))
+                                .put("on", on).toString());
             } else {
-                path = "/api/settings/" + vendor + "-checkin";
-                body = new JSONObject().put("on", on).toString();
+                // 供应商级
+                err = postCheckinSwitch(ctx, "/api/settings/" + vendor + "-checkin",
+                        new JSONObject().put("on", on).toString());
+                if (err == null) {
+                    // 插件层一起写（存在与否都写：上游只存 map，不校验 provider）
+                    for (String[] m : INHERITED_PLUGIN_IDS) {
+                        if (m[0].equals(vendor)) {
+                            String e2 = postCheckinSwitch(ctx, "/api/settings/plugin-checkin",
+                                    new JSONObject().put("provider", m[1])
+                                            .put("on", on).toString());
+                            if (err == null && e2 != null) {
+                                err = e2;
+                            }
+                        }
+                    }
+                }
             }
-            MagpieApi.Result r = MagpieApi.post(ctx, path, body, MagpieApi.WRITE_MS);
-            if (!r.ok()) {
-                return r.why();
+            if (err != null) {
+                return err;
             }
-            // 返回的是 settingsState；开关状态以 /api/state?last=1 为准重读
+            // 以 /api/state?last=1 为准重读
             MagpieApi.Result s = MagpieApi.stateLast(ctx);
             if (s.ok() && s.json() != null) {
                 stateOut[0] = s.json();
@@ -238,6 +270,11 @@ final class Checkins {
         } catch (Exception e) {
             return e.getMessage();
         }
+    }
+
+    private static String postCheckinSwitch(Context ctx, String path, String body) {
+        MagpieApi.Result r = MagpieApi.post(ctx, path, body, MagpieApi.WRITE_MS);
+        return r.ok() ? null : r.why();
     }
 
     /** 这家有没有能签的账号（checkinAccounts 里它的 by=vendor 有记录）。 */

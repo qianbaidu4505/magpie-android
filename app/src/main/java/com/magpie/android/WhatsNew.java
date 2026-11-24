@@ -39,6 +39,11 @@ final class WhatsNew {
     private static final android.util.SparseArray<String[]> NOTES = new android.util.SparseArray<>();
 
     static {
+        // 194 / 1.8.14
+        NOTES.put(194, new String[]{
+                "修复",
+                "• 壳的自动签到开关与 magpie 网页后台双向同步：内置四家（WorkBuddy/Trae CN/MiniMax/Qoder）有供应商级和插件层两层开关，现在壳切换时两层一起写，网页那边立刻看到一致状态；网页改任何一层，壳这边 40 秒内同步",
+        });
         // 193 / 1.8.13
         NOTES.put(193, new String[]{
                 "调整",
