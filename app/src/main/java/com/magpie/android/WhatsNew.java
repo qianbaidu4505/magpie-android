@@ -39,6 +39,13 @@ final class WhatsNew {
     private static final android.util.SparseArray<String[]> NOTES = new android.util.SparseArray<>();
 
     static {
+        // 192 / 1.8.12
+        NOTES.put(192, new String[]{
+                "调整",
+                "• 读取浮条去掉灰色挡条，只剩转圈和「正在读取…」",
+                "• 自动签到判定改口径：全部供应商都开启才算「已开启自动签到」，任何一个没开都显示未开启",
+                "• 弹层里切换开关后，头部状态点立即同步",
+        });
         // 191 / 1.8.11
         NOTES.put(191, new String[]{
                 "新功能",

@@ -352,6 +352,8 @@ final class NativePageAccounts extends NativePage {
                         } else {
                             checkinState = out[0];
                             host.toastPublic(name + " 自动签到已" + (checked ? "开启" : "关闭"));
+                            // 头部状态点跟这口开关联动：立即重读本页
+                            refresh(true);
                         }
                     });
                 });
@@ -372,15 +374,21 @@ final class NativePageAccounts extends NativePage {
         dlg.show();
     }
 
-    /** 至少一家开了自动签到？ */
+    /**
+     * 自动签到是否「已开启」：**全部**开关都开着才算（爸爸定的口径）——
+     * 只要有一个账号/供应商没开，就是「未开启自动签到」。
+     */
     private boolean anyCheckinOn(JSONObject state) {
         java.util.Map<String, Boolean> sw = Checkins.switches(state);
+        if (sw.isEmpty()) {
+            return false;
+        }
         for (Boolean b : sw.values()) {
-            if (b) {
-                return true;
+            if (!b) {
+                return false;
             }
         }
-        return false;
+        return true;
     }
 
     private static String vendorTitle(String vendor) {

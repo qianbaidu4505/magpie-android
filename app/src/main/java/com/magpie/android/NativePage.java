@@ -280,11 +280,9 @@ abstract class NativePage {
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(android.view.Gravity.CENTER);
         bar.setVisibility(android.view.View.GONE);
-        GradientDrawable bg = ui.round(ui.col(M3.SURFACE_CONTAINER_HIGH), 18);
-        bg.setAlpha(230);
-        bar.setBackground(bg);
-        int pad = ui.dp(10);
-        bar.setPadding(pad, ui.dp(6), pad, ui.dp(6));
+        // 不要灰色挡条：就一个转圈 + 文字，浮在页面顶部
+        int pad = ui.dp(8);
+        bar.setPadding(pad, ui.dp(4), pad, ui.dp(4));
         spinnerView.setLayoutParams(new LinearLayout.LayoutParams(ui.dp(18), ui.dp(18)));
         bar.addView(spinnerView);
         refreshHint.setPadding(ui.dp(8), 0, 0, 0);
