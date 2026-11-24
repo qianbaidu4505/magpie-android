@@ -17,6 +17,8 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -48,6 +50,8 @@ public final class DiagServer {
     private final AtomicBoolean running = new AtomicBoolean(true);
     private final String key;
     private final boolean lan;
+    /** 请求处理池：有界（4 并发），plugins-state 这类 60 秒慢端点也堆不出千线程。 */
+    private final ExecutorService pool = Executors.newFixedThreadPool(4);
 
     private DiagServer(ServerSocket server, int port, String key, boolean lan) {
         this.server = server;
@@ -92,6 +96,7 @@ public final class DiagServer {
                 s.server.close();
             } catch (IOException ignored) {
             }
+            s.pool.shutdownNow();
         }
     }
 
@@ -106,7 +111,7 @@ public final class DiagServer {
             while (running.get()) {
                 try {
                     final Socket c = server.accept();
-                    new Thread(() -> serve(c)).start();
+                    pool.execute(() -> serve(c));
                 } catch (IOException e) {
                     if (running.get()) {
                         Log.w(TAG, "accept 断了: " + e.getMessage());
@@ -144,9 +149,7 @@ public final class DiagServer {
                     auth = line.substring(14).trim();
                 }
             }
-            if (body > 0) {
-                c.getInputStream().skip(body); // 没有 POST，body 直接扔
-            }
+            // 没有 POST 端点，body 不消费——直接 Connection: close 丢弃即可
 
             // 鉴权：?key= 优先，其次 Authorization: Bearer <key>
             String given = query(path, "key");
@@ -244,7 +247,9 @@ public final class DiagServer {
     private static void send(Socket c, int code, String json) throws IOException {
         byte[] b = json.getBytes(StandardCharsets.UTF_8);
         OutputStream out = c.getOutputStream();
-        out.write(("HTTP/1.1 " + code + " OK\r\n"
+        String text = code == 200 ? "OK" : code == 403 ? "Forbidden"
+                : code == 404 ? "Not Found" : code == 405 ? "Method Not Allowed" : "OK";
+        out.write(("HTTP/1.1 " + code + " " + text + "\r\n"
                 + "Content-Type: application/json; charset=utf-8\r\n"
                 + "Content-Length: " + b.length + "\r\n"
                 + "Connection: close\r\n\r\n").getBytes(StandardCharsets.UTF_8));
@@ -295,13 +300,23 @@ public final class DiagServer {
         return o.toString();
     }
 
+    /** 脱敏后的日志尾部（logJson 与 packJson 共用，别绕开）。 */
+    private static String maskedLog(int n) {
+        String log = GatewayService.lastLog(n);
+        StringBuilder sb = new StringBuilder();
+        for (String l : (log == null ? "" : log).split("\n")) {
+            sb.append(DiagnosticsPack.safe(l)).append('\n');
+        }
+        return sb.toString();
+    }
+
     /** 内核日志尾部（appendLog 落盘的那份，跟「查看日志」同源）。 */
     private String logJson(int n) {
         try {
-            String log = GatewayService.lastLog(n);
+            String log = maskedLog(n);
             JSONArray lines = new JSONArray();
-            for (String l : (log == null ? "" : log).split("\n")) {
-                lines.put(DiagnosticsPack.safe(l));
+            for (String l : log.split("\n")) {
+                lines.put(l);
             }
             return new JSONObject().put("lines", lines.length())
                     .put("log", lines).toString();
@@ -380,7 +395,7 @@ public final class DiagServer {
             Context ctx = App.context();
             o.put("info", DiagnosticsPack.buildInfo(ctx,
                     DiagnosticsPack.version(ctx)));
-            o.put("log", GatewayService.lastLog(1000));
+            o.put("log", maskedLog(1000));
             o.put("crash", DiagnosticsPack.crashLog());
             o.put("plugins", DiagnosticsPack.pluginsSafe(ctx));
             o.put("plugins_state", DiagnosticsPack.pluginsStateSafe(ctx));

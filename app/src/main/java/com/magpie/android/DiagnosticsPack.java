@@ -90,9 +90,6 @@ final class DiagnosticsPack {
     }
 
     /** 生成并写入 zip，返回目标文件；失败抛异常带原因。 */
-    static File export(Activity act) throws Exception {
-        return export(act, null).file;
-    }
 
     /**
      * 生成并写入 zip，带进度回调。
@@ -276,13 +273,6 @@ final class DiagnosticsPack {
     }
 
     /** 给用户看的产出位置说明。 */
-    static String where(File f) {
-        String p = f.getAbsolutePath();
-        if (p.startsWith("/sdcard/")) {
-            return "已导出到 " + p;
-        }
-        return "已导出到（应用目录）" + p;
-    }
 
     // ------------------------------------------------------------------
 
@@ -326,6 +316,9 @@ final class DiagnosticsPack {
             Process p = new ProcessBuilder("logcat", "-b", "crash", "-d", "-t", "400")
                     .redirectErrorStream(true).start();
             String all = readAll(p.getInputStream());
+            if (!p.waitFor(6, java.util.concurrent.TimeUnit.SECONDS)) {
+                p.destroyForcibly();
+            }
             StringBuilder sb = new StringBuilder();
             for (String line : all.split("\n")) {
                 if (line.contains("com.magpie.android") || line.contains("FATAL")) {
@@ -1314,7 +1307,11 @@ final class DiagnosticsPack {
             Process p = new ProcessBuilder(cmd.split(" "))
                     .redirectErrorStream(true).start();
             String all = readAll(p.getInputStream());
-            p.waitFor();
+            // 权限被拒/SELinux 拦截时子进程可能挂住不退出，别让诊断卡死
+            if (!p.waitFor(6, java.util.concurrent.TimeUnit.SECONDS)) {
+                p.destroyForcibly();
+                sb.append("（命令 6 秒没退出，已被强杀——多半是无权限）\n");
+            }
             int n = 0;
             for (String line : all.split("\n")) {
                 if (line.contains(key) || line.contains("magpie")

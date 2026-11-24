@@ -200,7 +200,7 @@ public class NativeHome extends Activity {
         // 从后台回来：如果刚才后台待得够久（小米 greeze 约 40 秒就冻），
         // 补一条「为什么刚才卡」的提醒；时间戳为 0 时什么都不做。
         FreezeGuard.checkAfterReturn(this, Prefs.freezeLeftAt(this));
-        // 前台才起这两条定时器：顶栏状态点每 2 秒、页面数据每 30 秒。
+        // 前台才起这两条定时器：顶栏状态点每 2 秒、页面数据每 40 秒。
         // 放在 onResume 里成对启停，后台就一次唤醒都没有。
         uiHandler.removeCallbacks(ticker);
         uiHandler.removeCallbacks(autoRefresh);
@@ -710,6 +710,8 @@ public class NativeHome extends Activity {
             lanPill.setText(lan);
         }
 
+        // syncNotification 内部已按状态翻转去重（lastNotifAlive），
+        // ticker 每 2 秒调它不会重发通知。
         if (alive && gatewayReady) {
             GatewayService.syncNotification(this, true);
         }

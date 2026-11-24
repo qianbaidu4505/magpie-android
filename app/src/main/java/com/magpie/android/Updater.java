@@ -559,6 +559,10 @@ public final class Updater {
             part.delete();
         }
         long total = rel.size > 0 ? rel.size : (have + c.getContentLength());
+        // 服务器没给 Content-Length 时 total 是负的：钳到 0，别让进度条除以负数
+        if (total < 0) {
+            total = 0;
+        }
         step.progress(have, total);
 
         try (InputStream in = new BufferedInputStream(c.getInputStream(), 1 << 16);

@@ -119,10 +119,15 @@ final class ShizukuShell {
             return;
         }
         addListenersOnce();
+        // 用 WeakReference 存回调：用户不点授权框直接离开页面时，静态字段
+        // 不把 Activity 钉住。监听器侧拿弱引用，Activity 已回收就静默放弃。
+        pendingRef = cb == null ? null
+                : new java.lang.ref.WeakReference<>(cb);
         try {
             Shizuku.requestPermission(REQ_PERMISSION);
         } catch (Throwable e) {
             Log.w(TAG, "requestPermission 失败: " + e);
+            pendingRef = null;
             if (cb != null) {
                 cb.result(false);
             }
@@ -130,8 +135,8 @@ final class ShizukuShell {
         // 结果由 OnRequestPermissionResultListener 收到，见 addListenersOnce
     }
 
-    /** 授权结果回调（PowerLab 用）。 */
-    static volatile OnPermission pendingResult;
+    /** 授权结果回调（WeakReference 持有，防 Activity 泄漏）。 */
+    private static volatile java.lang.ref.WeakReference<OnPermission> pendingRef;
 
     private static void addListenersOnce() {
         if (listenersAdded) {
@@ -145,8 +150,9 @@ final class ShizukuShell {
                 }
                 boolean ok = grantResult == PackageManager.PERMISSION_GRANTED;
                 Log.i(TAG, "Shizuku 授权结果: " + ok);
-                OnPermission cb = pendingResult;
-                pendingResult = null;
+                java.lang.ref.WeakReference<OnPermission> ref = pendingRef;
+                pendingRef = null;
+                OnPermission cb = ref == null ? null : ref.get();
                 if (cb != null) {
                     cb.result(ok);
                 }
@@ -191,9 +197,26 @@ final class ShizukuShell {
         }
         Process p = null;
         try {
-            p = Shizuku.newProcess(
+            final Process proc = Shizuku.newProcess(
                     new String[]{"/system/bin/sh", "-c", cmd},
                     null, null);
+            p = proc;
+            // stderr 并行读：以前 stdout 读到 EOF 才轮到 stderr，命令往 stderr
+            // 写满 pipe 缓冲时子进程卡在 write、stdout 永远到不了 EOF，这里就
+            // 永久阻塞（没有 soTimeout）。
+            final StringBuilder eb = new StringBuilder();
+            Thread errT = new Thread(() -> {
+                try (BufferedReader r = new BufferedReader(
+                        new InputStreamReader(proc.getErrorStream(), "UTF-8"))) {
+                    String line;
+                    while ((line = r.readLine()) != null) {
+                        eb.append(line).append('\n');
+                    }
+                } catch (Exception ignored) {
+                }
+            }, "shizuku-exec-err");
+            errT.setDaemon(true);
+            errT.start();
             StringBuilder sb = new StringBuilder();
             try (BufferedReader r = new BufferedReader(
                     new InputStreamReader(p.getInputStream(), "UTF-8"))) {
@@ -203,16 +226,9 @@ final class ShizukuShell {
                 }
             }
             int code = p.waitFor();
+            errT.join(2000);
             String err = null;
             if (code != 0) {
-                StringBuilder eb = new StringBuilder();
-                try (BufferedReader r = new BufferedReader(
-                        new InputStreamReader(p.getErrorStream(), "UTF-8"))) {
-                    String line;
-                    while ((line = r.readLine()) != null) {
-                        eb.append(line).append('\n');
-                    }
-                }
                 err = eb.length() > 0 ? eb.toString().trim() : ("退出码 " + code);
             }
             return new Result(code, sb.toString().trim(), err);

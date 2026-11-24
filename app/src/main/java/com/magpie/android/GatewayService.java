@@ -69,8 +69,6 @@ public class GatewayService extends Service {
 
     private static final Object LOCK = new Object();
     private static Process process;
-    private static Thread logThread;
-    private static Thread watchThread;
     private static boolean ready;
     private static boolean starting;
     private static int exitCode = -1;
@@ -286,6 +284,20 @@ public class GatewayService extends Service {
         java.util.Map<String, String> env = pb.environment();
         env.put("HOME", homeDir(this).getAbsolutePath());
         Process p = pb.start();
+        // 先把子进程输出读干再等退出：出错时 magpie 可能打印长堆栈，
+        // 塞满 pipe 缓冲（~64KB）会让它卡在 write 上，waitFor 就白等 30 秒。
+        // 输出丢弃（这本来就是 execQuiet）。
+        Thread drain = new Thread(() -> {
+            try (java.io.InputStream in = p.getInputStream()) {
+                byte[] buf = new byte[4096];
+                while (in.read(buf) != -1) {
+                    // 丢
+                }
+            } catch (Exception ignored) {
+            }
+        }, "execQuiet-drain");
+        drain.setDaemon(true);
+        drain.start();
         try {
             p.waitFor(30, java.util.concurrent.TimeUnit.SECONDS);
         } catch (InterruptedException e) {
@@ -371,12 +383,10 @@ public class GatewayService extends Service {
         final Process child = p;
         Thread lt = new Thread(() -> pumpLog(ctx, child), "magpie-log");
         lt.setDaemon(true);
-        logThread = lt;
         lt.start();
 
         Thread wt = new Thread(() -> watch(ctx, child, gwHost, gwPort, web), "magpie-watch");
         wt.setDaemon(true);
-        watchThread = wt;
         wt.start();
     }
 
@@ -412,9 +422,9 @@ public class GatewayService extends Service {
             }
             sleep(300);
         }
-        if (!p.isAlive()) {
-            return;
-        }
+        // 以前这里「进程死了直接 return」：就绪等待期死掉的内核不记退出码、
+        // 不通知、不重试，UI 停在「正在启动」。删掉提前 return，统一落到
+        // 下面 waitFor() 记退出码 + 自动恢复的老路。
         int code = -1;
         try {
             code = p.waitFor();
@@ -440,14 +450,33 @@ public class GatewayService extends Service {
             // 用完。手动重启那条路一直有 waitPortsFree()，这里漏了。
             waitPortsFree();
             if (!stopping.get()) {
+                // restart() 可能已把 LOCK 里的 process 换成了新进程：那旧 watch
+                // 线程（我们自己）就该退场了，再 boot() 会叠出第二个内核，
+                // stopSelf() 会把新服务也停掉。只有当前 process 仍是我们等的
+                // 这个 p 时，这条自动恢复才归我们管。
+                boolean mine;
                 synchronized (LOCK) {
-                    starting = false;
+                    mine = process == p;
                 }
-                boot();
+                if (mine) {
+                    synchronized (LOCK) {
+                        starting = false;
+                    }
+                    boot();
+                    return;
+                }
+                appendLog("已有新的重启流程接管，这条旧的退出恢复不再执行");
                 return;
             }
         }
-        stopSelf();
+        // stopSelf 同理：只有 process 仍是我们等的 p（说明没人接管）才停服务
+        boolean mine;
+        synchronized (LOCK) {
+            mine = process == p;
+        }
+        if (mine) {
+            stopSelf();
+        }
     }
 
     /**
@@ -635,7 +664,6 @@ public class GatewayService extends Service {
     // log ring
     // ------------------------------------------------------------------
 
-    private static final int TAIL_LINES = 400;
     private static final Object TAIL_LOCK = new Object();
 
     /** 磁盘日志上限：50 MB。超了就把 magpie.log 改成 magpie.log.1（只留一份旧的）。 */
@@ -649,10 +677,19 @@ public class GatewayService extends Service {
             if (tail.length() > 0) {
                 tail.append('\n');
             }
-            if (tail.length() > 64 * 1024) {
-                tail.setLength(0);
-            }
             tail.append(line);
+            if (tail.length() > 64 * 1024) {
+                // 超限不是整段清零（那会让 lastLog(3000) 突然只剩几行），
+                // 而是从中间最近的行界截掉头部，保留一半
+                String all = tail.toString();
+                int cut = all.indexOf('\n', all.length() / 2);
+                if (cut >= 0) {
+                    tail.setLength(0);
+                    tail.append(all, cut + 1, all.length());
+                } else {
+                    tail.setLength(0);
+                }
+            }
         }
         try {
             File f = logFile(App.context());
@@ -1088,6 +1125,11 @@ public class GatewayService extends Service {
      * 所以这里一律直接发。
      */
     static void syncNotification(Context ctx, boolean alive) {
+        // 去重：状态没翻转就不重发（notify 有系统频控）。
+        Boolean last = lastNotifAlive;
+        if (last != null && last == alive) {
+            return;
+        }
         lastNotifAlive = alive;
         if (alive) {
             NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);

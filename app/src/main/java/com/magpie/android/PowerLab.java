@@ -200,11 +200,10 @@ final class PowerLab {
                 return;
             }
             toast(act, "正在请求 Shizuku 授权…");
-            ShizukuShell.pendingResult = granted -> act.runOnUiThread(() -> {
+            ShizukuShell.request(act, granted -> act.runOnUiThread(() -> {
                 toast(act, granted ? "Shizuku 已授权" : "授权被拒绝");
                 load.run();
-            });
-            ShizukuShell.request(act, null);
+            }));
         });
 
         szOpen.setOnClickListener(v -> ShizukuShell.openApp(act));
