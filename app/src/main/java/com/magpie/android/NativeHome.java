@@ -1637,8 +1637,12 @@ public class NativeHome extends Activity {
 
     private void showAbout() {
         String ver = "?";
+        int code = 0;
         try {
-            ver = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+            android.content.pm.PackageInfo pi = getPackageManager()
+                    .getPackageInfo(getPackageName(), 0);
+            ver = pi.versionName == null ? "?" : pi.versionName;
+            code = pi.versionCode;
         } catch (Exception ignored) {
         }
 
@@ -1646,7 +1650,8 @@ public class NativeHome extends Activity {
         int pad = ui.dp(20);
         box.setPadding(pad, ui.dp(4), pad, 0);
 
-        TextView verView = ui.mono("Magpie for Android " + ver, 12, M3.ON_SURFACE_VARIANT);
+        TextView verView = ui.mono("Magpie for Android " + ver
+                + " (code " + code + ")", 12, M3.ON_SURFACE_VARIANT);
         verView.setLayoutParams(ui.matchWrap(2));
         box.addView(verView);
 
