@@ -357,8 +357,12 @@ public class NativeHome extends Activity {
      * 要能滚出胶囊，所以滚动内容自己再加这么多底部空白。
      */
     static int bottomInset(Ui ui) {
-        // 底栏实际约 54dp（比之前低），外面上下各 14dp，再算上导航条
-        return ui.dp(58) + ui.dp(6) * 2 + sNavHeight;
+        // 底栏实际约 54dp（比之前低），外面上下各 14dp，再算上导航条。
+        // 额外 +20dp 安全余量：K90 Pro Max 等高分辨率手势导航机上，
+        // navigation_bar_height 返回很小（手势条），最后一张卡的标题会从
+        // 胶囊栏下沿露出一条——用户（REDMI K90 Pro Max）实测反馈，宁可
+        // 空白多留一点也不能露内容。
+        return ui.dp(58) + ui.dp(6) * 2 + sNavHeight + ui.dp(20);
     }
 
     private View buildHeader() {

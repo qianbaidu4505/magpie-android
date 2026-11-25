@@ -39,6 +39,11 @@ final class WhatsNew {
     private static final android.util.SparseArray<String[]> NOTES = new android.util.SparseArray<>();
 
     static {
+        // 199 / 1.8.19
+        NOTES.put(199, new String[]{
+                "修复",
+                "• 概览页滚到底时，「账号额度」等末尾标题会从底部导航胶囊下方露出一条——底部留白加大安全余量（REDMI K90 Pro Max 反馈）",
+        });
         // 198 / 1.8.18
         NOTES.put(198, new String[]{
                 "修复",
