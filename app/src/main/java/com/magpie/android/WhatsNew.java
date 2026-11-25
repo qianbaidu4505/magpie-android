@@ -39,6 +39,12 @@ final class WhatsNew {
     private static final android.util.SparseArray<String[]> NOTES = new android.util.SparseArray<>();
 
     static {
+        // 208 / 1.8.28
+        NOTES.put(208, new String[]{
+                "修复",
+                "• 悬浮球拖到状态栏/屏幕外后够不着：现在松手会自动夹回屏幕内，并且每次打开「显示悬浮球」都会复位到默认位置",
+                "• 悬浮球设置页新增「位置 → 复位」一行，一键拉回默认位置",
+        });
         // 207 / 1.8.27
         NOTES.put(207, new String[]{
                 "改进",

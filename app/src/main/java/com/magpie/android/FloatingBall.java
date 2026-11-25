@@ -278,6 +278,19 @@ final class FloatingBall {
                     }
                     case MotionEvent.ACTION_UP:
                         if (moved) {
+                            // 松手时夹回屏幕内：拖到状态栏/屏幕外会够不着，
+                            // 这里直接把坐标夹到可见范围再存
+                            int[] screen = screenSize(ctx);
+                            int size = ballView.getWidth();
+                            int maxX = Math.max(0, screen[0] - size);
+                            int maxY = Math.max(0, screen[1] - size - statusBarHeight(ctx));
+                            ballLp.x = Math.max(0, Math.min(maxX, ballLp.x));
+                            ballLp.y = Math.max(statusBarHeight(ctx),
+                                    Math.min(screen[1] - size, ballLp.y));
+                            try {
+                                wm.updateViewLayout(ballView, ballLp);
+                            } catch (Exception ignored) {
+                            }
                             Prefs.setBallPos(ctx, ballLp.x, ballLp.y);
                         } else {
                             // 点击：打开 App
@@ -309,6 +322,26 @@ final class FloatingBall {
             return WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
         }
         return WindowManager.LayoutParams.TYPE_PHONE;
+    }
+
+    /** 屏幕宽高（像素）。 */
+    private static int[] screenSize(Context ctx) {
+        try {
+            android.util.DisplayMetrics m = ctx.getResources().getDisplayMetrics();
+            return new int[]{m.widthPixels, m.heightPixels};
+        } catch (Exception e) {
+            return new int[]{1080, 1920};
+        }
+    }
+
+    /** 状态栏高度（像素），防止球贴到状态栏被系统遮挡后拖不动。 */
+    private static int statusBarHeight(Context ctx) {
+        try {
+            int id = ctx.getResources().getIdentifier("status_bar_height", "dimen", "android");
+            return id > 0 ? ctx.getResources().getDimensionPixelSize(id) : dp(ctx, 24);
+        } catch (Exception e) {
+            return dp(ctx, 24);
+        }
     }
 
     private static int dp(Context ctx, int v) {

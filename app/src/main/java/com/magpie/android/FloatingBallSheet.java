@@ -87,6 +87,16 @@ final class FloatingBallSheet {
                     sizeValue.setText(n + " dp");
                     FloatingBall.refresh(act);
                 })));
+
+        // 复位位置：球拖到屏幕外（比如状态栏里）够不着时用这个拉回来
+        TextView resetValue = valueText(act, ui, "复位");
+        ballCard.addView(paramRow(act, ui, "位置",
+                "拖到屏幕外够不着了？点这里拉回默认位置",
+                resetValue, v -> {
+                    Prefs.resetBallPos(act);
+                    FloatingBall.refresh(act);
+                    toast(act, "已复位到默认位置");
+                }));
         root.addView(ballCard);
 
         // ================= 卡片 2：保活窗口 =================
@@ -116,6 +126,9 @@ final class FloatingBallSheet {
                 return;
             }
             if (checked) {
+                // 每次打开都回到默认位置：球被拖到屏幕外（状态栏里）够不着时，
+                // 关掉再打开就能拉回来——比让用户去找坐标靠谱
+                Prefs.resetBallPos(act);
                 String err = FloatingBall.showBall(act);
                 if (err != null) {
                     toast(act, "开启失败：" + err);

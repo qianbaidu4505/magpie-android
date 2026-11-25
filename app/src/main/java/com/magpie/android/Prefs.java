@@ -404,12 +404,21 @@ public final class Prefs {
         sp(ctx).edit().putInt("ball_keep_dp", Math.max(1, Math.min(16, dp))).apply();
     }
 
+    /** 悬浮球默认位置（屏幕左上角起算的像素坐标）。 */
+    public static final int BALL_DEFAULT_X = 0;
+    public static final int BALL_DEFAULT_Y = 400;
+
     public static int ballX(Context ctx) {
-        return sp(ctx).getInt("ball_x", 0);
+        return sp(ctx).getInt("ball_x", BALL_DEFAULT_X);
     }
 
     public static int ballY(Context ctx) {
-        return sp(ctx).getInt("ball_y", 400);
+        return sp(ctx).getInt("ball_y", BALL_DEFAULT_Y);
+    }
+
+    /** 把悬浮球位置复位到默认。 */
+    public static void resetBallPos(Context ctx) {
+        setBallPos(ctx, BALL_DEFAULT_X, BALL_DEFAULT_Y);
     }
 
     public static void setBallPos(Context ctx, int x, int y) {
