@@ -67,6 +67,13 @@ final class M3 {
                 0xFFE4E8ED, 0xFF4A4F57, 0xFFB3BAC2, 0xFFDCE0E5, 0xFFEDEFF2, 0xFFFFFFFF,
                 0xFFFFFFFF, 0xFFFFFFFF, 0xFFF9FAFB, 0xFFF1F3F5, 0xFFEAEDF0, 0xFF1C1E21,
                 0xFFF7F8FA, 0xFF85C1E9, 0xFF000000, 0xFFF39C12},
+        // 终端（浅色）: 纸白底 + 墨黑字，边线极细
+        {0xFF1F6F4A, 0xFFFFFFFF, 0xFFDCF0E4, 0xFF0B3B26, 0xFF55606B, 0xFFFFFFFF,
+                0xFFE6EBEF, 0xFF22303A, 0xFF1F8A54, 0xFFFFFFFF, 0xFFDCF0E4, 0xFF0B3B26,
+                0xFFC0392B, 0xFFFFFFFF, 0xFFF8E2DF, 0xFF7A1D14, 0xFFFCFCFC, 0xFF14181C,
+                0xFFE6EBEF, 0xFF3E4750, 0xFFB8C0C8, 0xFFDFE4E9, 0xFFF2F4F6, 0xFFFFFFFF,
+                0xFFFFFFFF, 0xFFFFFFFF, 0xFFFCFCFC, 0xFFF3F5F7, 0xFFEBEEF1, 0xFF14181C,
+                0xFFFCFCFC, 0xFF8FC7A8, 0xFF000000, 0xFFC98A18},
     };
 
     static final int[][] DARK = {
@@ -79,6 +86,13 @@ final class M3 {
                 0xFF262D36, 0xFF9AA4AF, 0xFF525B66, 0xFF2A3037, 0xFF08090C, 0xFF1E242B,
                 0xFF0A0C10, 0xFF1A1F26, 0xFF20262E, 0xFF262D36, 0xFF2C343D, 0xFFE8EAED,
                 0xFF0D1014, 0xFF5DADE2, 0xFF000000, 0xFFD29922},
+        // 终端（深色）: 纯黑 #000 底 / #0C0F12 块 / 4dp 硬角 / 单色青绿
+        {0xFF4ECB8C, 0xFF000000, 0xFF10331F, 0xFFCFF0DD, 0xFF7A858F, 0xFF000000,
+                0xFF16191D, 0xFFC2CBD3, 0xFF4ECB8C, 0xFF000000, 0xFF10331F, 0xFFCFF0DD,
+                0xFFEF5F5F, 0xFF000000, 0xFF3A1616, 0xFFF7DADA, 0xFF000000, 0xFFD8DEE4,
+                0xFF16191D, 0xFF8A949E, 0xFF3A424A, 0xFF1C2126, 0xFF000000, 0xFF0C0F12,
+                0xFF000000, 0xFF0C0F12, 0xFF11151A, 0xFF161A1F, 0xFF1B2025, 0xFFD8DEE4,
+                0xFF000000, 0xFF4ECB8C, 0xFF000000, 0xFFB07D14},
     };
 
 
@@ -139,27 +153,44 @@ final class M3 {
         }
     }
 
-    /** 经典：四张独立发光卡、大圆角、有阴影 —— 换之前的原样。 */
-    static final Style STYLE_CLASSIC = new Style(24f, 18f, 1.5f, true, 8, 30f, false, false);
-    /** 紧凑：一整张卡 + 发丝线、无阴影、等宽数字。 */
-    static final Style STYLE_COMPACT = new Style(20f, 14f, 1f, false, 0, 28f, true, true);
+    /** 玻璃：四张独立卡、主色发光描边、大圆角、柔和阴影。 */
+    static final Style STYLE_GLASS = new Style(24f, 18f, 1.5f, true, 8, 30f, false, false);
+    /** 原版：一整张大卡 + 分割线，就是最早那版的样子。 */
+    static final Style STYLE_ORIGINAL = new Style(20f, 14f, 1f, false, 0, 28f, true, true);
+    /** 终端：纯黑、4dp 硬角、等宽、无任何装饰。 */
+    static final Style STYLE_TERMINAL = new Style(4f, 3f, 1f, false, 0, 26f, true, true);
 
-    /** 可选主题。下标存在 Prefs.THEME_STYLE 里，切换后整页重建。 */
+    /**
+     * 可选主题。下标存在 Prefs.THEME_STYLE 里，切换后整页重建。
+     *
+     * <p>第一位即默认：玻璃 = 改动前的原样，老用户升级不会被换皮。
+     * 「原版」是更早那版一整张大卡的布局，摆在第二位方便对比。
+     */
     static final Theme[] THEMES = {
-            new Theme("classic", "经典", "四张独立卡 · 发光描边 · 大圆角 · 柔和阴影",
-                    LIGHT[0], DARK[0], STYLE_CLASSIC),
-            new Theme("compact", "紧凑", "一整张卡 · 发丝分割线 · 等宽数字 · 无阴影",
-                    LIGHT[1], DARK[1], STYLE_COMPACT),
+            new Theme("glass", "玻璃", "四张独立卡 · 主色发光描边 · 大圆角 · 柔和阴影",
+                    LIGHT[0], DARK[0], STYLE_GLASS),
+            new Theme("original", "原版", "一整张大卡 · 分割线分组 · 等宽数字 · 无阴影",
+                    LIGHT[1], DARK[1], STYLE_ORIGINAL),
+            new Theme("terminal", "终端", "纯黑底 · 4dp 硬角 · 单色青绿 · 无装饰",
+                    LIGHT[2], DARK[2], STYLE_TERMINAL),
     };
 
-    /** 当前主题下标，越界退回第 0 套。 */
+    /**
+     * 默认主题：玻璃（也就是改动之前的样子）。
+     *
+     * <p>老用户升级上来不该被换皮，所以 THEMES 里虽然把「原版」排在第一位
+     * （方便一眼看到最朴素的那个），默认值仍然指回玻璃。
+     */
+    static final int DEFAULT_THEME = 1;
+
+    /** 当前主题下标，越界退回默认那套。 */
     static int themeIndex(Context ctx) {
         int i = Prefs.themeStyle(ctx);
-        return i < 0 || i >= THEMES.length ? 0 : i;
+        return i < 0 || i >= THEMES.length ? DEFAULT_THEME : i;
     }
 
     static void setThemeIndex(Context ctx, int i) {
-        Prefs.setThemeStyle(ctx, i < 0 || i >= THEMES.length ? 0 : i);
+        Prefs.setThemeStyle(ctx, i < 0 || i >= THEMES.length ? DEFAULT_THEME : i);
     }
 
     static Theme theme(Context ctx) {
@@ -177,8 +208,9 @@ final class M3 {
      * 当前主题是不是「带主色描边」那一类。
      *
      * <p>以前这是个写死 {@code true} 的开关，页面里 31 处 {@code ui.design}
-     * 靠它分叉（四张独立卡 vs 一整张卡）。现在它跟随主题走：经典=true，
-     * 紧凑=false —— 所以那 31 处一行都不用改，切主题就自动换布局。
+     * 靠它分叉（四张独立卡 vs 一整张卡）。现在它跟随主题走：只有「玻璃」
+     * 是 true，原版和终端都是 false —— 所以那 31 处一行都不用改，
+     * 切主题就自动换布局。
      */
     static boolean design(Context ctx) {
         return style(ctx).accentBorder;

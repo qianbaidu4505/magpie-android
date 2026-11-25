@@ -765,15 +765,16 @@ public class NativeHome extends Activity {
         // 第一组就是「打开控制后台」——最常用的一条，压在最上面，不用翻。
         final String[] groups = {"控制台", "网关", "插件", "更新", "其他"};
         final String[][] titles = {
-                {"赞赏作者", "打开控制后台", "错误诊断", "AI 排查端口"},
+                {"赞赏作者", "打开控制后台", "界面主题", "错误诊断", "AI 排查端口"},
                 {"重启网关", "悬浮球保活", "查看日志", "复制网关地址", "忽略电池优化"},
                 {"导入本地插件", "粘贴 Marvis 登录回调", "文件管理器", "省电策略实验室", "缓存清理"},
                 {"检查 magpie 更新", "检查 App 更新", "更新设置"},
-                {"复制网页登录链接", "用浏览器打开", "界面主题", "设置", "关于"},
+                {"复制网页登录链接", "用浏览器打开", "设置", "关于"},
         };
         final String[][] subs = {
                 {"微信赞赏码 + 支付宝收款码；纯属自愿，不构成任何服务承诺",
                         "magpie 自己的完整网页界面：插件、脱敏、同步备份都在这里",
+                        "原版 / 玻璃 / 终端三套观感，选完立刻生效",
                         "收集全局现场：日志、插件加载错误、流量归属、外部连接、进程资源，发作者排查",
                         "本机开一个诊断端口，手机上的 AI 软件或电脑都能直接连上来查"},
                 {"先停再起，改过密钥或配置后用得上",
@@ -789,14 +790,14 @@ public class NativeHome extends Activity {
                         "内核与壳软件各自的稳定/测试渠道和更新源"},
                 {"带 k= 的完整网页地址，粘到浏览器里直接登进去（绕过登录页）",
                         "交给系统浏览器，方便用电脑上的工具看",
-                        "经典 / 紧凑两套观感，选完立刻生效",
                         "端口、局域网访问、外观与开机启动",
                         "官方仓库、移植作者与许可证"},
         };
         final int[][] icons = {
                 // 控制台：赞赏 / 控制后台 / 错误诊断 / AI排查端口
                 {R.drawable.ic_hand_heart, R.drawable.ic_monitor_cog,
-                        R.drawable.ic_stethoscope, R.drawable.ic_bot},
+                        R.drawable.ic_layout_dashboard, R.drawable.ic_stethoscope,
+                        R.drawable.ic_bot},
                 // 网关：重启 / 悬浮球 / 日志 / 复制地址 / 电池优化
                 {R.drawable.ic_rotate_cw, R.drawable.ic_aperture,
                         R.drawable.ic_file_text, R.drawable.ic_copy, R.drawable.ic_zap},
@@ -808,8 +809,7 @@ public class NativeHome extends Activity {
                         R.drawable.ic_settings_2},
                 // 其他：网页登录链接 / 浏览器 / 设置 / 关于
                 {R.drawable.ic_link, R.drawable.ic_external_link,
-                        R.drawable.ic_layout_dashboard, R.drawable.ic_settings,
-                        R.drawable.ic_info},
+                        R.drawable.ic_settings, R.drawable.ic_info},
         };
 
         final Dialog dialog = new Dialog(this, R.style.Theme_Magpie_Sheet);
@@ -934,6 +934,8 @@ public class NativeHome extends Activity {
                 } else if (index == 1) {
                     openWebUi();
                 } else if (index == 2) {
+                    ThemeSheet.show(this, ui);
+                } else if (index == 3) {
                     confirmAndDiagnose();
                 } else {
                     showDiagPort();
@@ -992,9 +994,6 @@ public class NativeHome extends Activity {
                         openInBrowser();
                         break;
                     case 2:
-                        ThemeSheet.show(this, ui);
-                        break;
-                    case 3:
                         openSettings();
                         break;
                     default:

@@ -39,7 +39,8 @@ final class ThemeSheet {
         root.addView(ui.text("界面主题", 17, M3.ON_SURFACE, true));
 
         TextView intro = ui.text("选完立刻生效，不用重启。"
-                        + "「经典」是原来的样子，「紧凑」是信息密度更高的版本。",
+                        + "「玻璃」是当前的样子，「原版」是最早那版整卡布局，"
+                        + "「终端」是纯黑高对比。",
                 12, M3.ON_SURFACE_VARIANT, false);
         intro.setLineSpacing(ui.dp(2), 1f);
         intro.setLayoutParams(ui.matchWrap(10));

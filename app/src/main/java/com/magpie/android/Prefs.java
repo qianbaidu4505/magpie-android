@@ -70,14 +70,19 @@ public final class Prefs {
         sp(ctx).edit().putInt(THEME_MODE, m < 0 || m > 2 ? 0 : m).apply();
     }
 
-    /** 界面风格：只做下标校验，具体有几套由 {@link M3#THEMES} 决定。 */
+    /**
+     * 界面风格下标，具体有几套由 {@link M3#THEMES} 决定。
+     *
+     * <p>默认值取「玻璃」而不是下标 0：老用户升级上来必须保持原来的样子，
+     * 不能因为我们把「原版」摆到第一位，就自作主张换了别人的界面。
+     */
     public static int themeStyle(Context ctx) {
-        int i = sp(ctx).getInt(THEME_STYLE, 0);
-        return i < 0 || i >= M3.THEMES.length ? 0 : i;
+        int i = sp(ctx).getInt(THEME_STYLE, M3.DEFAULT_THEME);
+        return i < 0 || i >= M3.THEMES.length ? M3.DEFAULT_THEME : i;
     }
 
     public static void setThemeStyle(Context ctx, int i) {
-        int v = i < 0 || i >= M3.THEMES.length ? 0 : i;
+        int v = i < 0 || i >= M3.THEMES.length ? M3.DEFAULT_THEME : i;
         sp(ctx).edit().putInt(THEME_STYLE, v).apply();
     }
 
