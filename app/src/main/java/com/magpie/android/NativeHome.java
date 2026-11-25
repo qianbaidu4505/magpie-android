@@ -258,6 +258,7 @@ public class NativeHome extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        FloatingBallSheet.onActivityResult(this, requestCode, resultCode, data);
         if (requestCode == FileManager.REQ_IMPORT_FILE) {
             if (resultCode == RESULT_OK && data != null) {
                 FileManager.onFilePicked(this, ui, data.getData());
@@ -765,7 +766,7 @@ public class NativeHome extends Activity {
         final String[] groups = {"控制台", "网关", "插件", "更新", "其他"};
         final String[][] titles = {
                 {"赞赏作者", "打开控制后台", "错误诊断", "AI 排查端口"},
-                {"重启网关", "查看日志", "复制网关地址", "忽略电池优化"},
+                {"重启网关", "悬浮球保活", "查看日志", "复制网关地址", "忽略电池优化"},
                 {"导入本地插件", "粘贴 Marvis 登录回调", "文件管理器", "省电策略实验室", "缓存清理"},
                 {"检查 magpie 更新", "检查 App 更新", "更新设置"},
                 {"复制网页登录链接", "用浏览器打开", "设置", "关于"},
@@ -776,6 +777,7 @@ public class NativeHome extends Activity {
                         "收集全局现场：日志、插件加载错误、流量归属、外部连接、进程资源，发作者排查",
                         "本机开一个诊断端口，手机上的 AI 软件或电脑都能直接连上来查"},
                 {"先停再起，改过密钥或配置后用得上",
+                        "设了无限制仍被系统掐断？加个悬浮球通常就不断了（图标/大小可调）",
                         "网关最后写下的三百行输出", "把 …:3425/v1 复制到剪贴板",
                         "让系统不要在熄屏后冻结网关"},
                 {"从手机存储选文件夹，拷进沙箱并交给 magpie",
@@ -794,9 +796,9 @@ public class NativeHome extends Activity {
                 // 控制台：赞赏 / 控制后台 / 错误诊断 / AI排查端口
                 {R.drawable.ic_hand_heart, R.drawable.ic_monitor_cog,
                         R.drawable.ic_stethoscope, R.drawable.ic_bot},
-                // 网关：重启 / 日志 / 复制地址 / 电池优化
-                {R.drawable.ic_rotate_cw, R.drawable.ic_file_text,
-                        R.drawable.ic_copy, R.drawable.ic_zap},
+                // 网关：重启 / 悬浮球 / 日志 / 复制地址 / 电池优化
+                {R.drawable.ic_rotate_cw, R.drawable.ic_aperture,
+                        R.drawable.ic_file_text, R.drawable.ic_copy, R.drawable.ic_zap},
                 // 插件：导入 / 粘贴回调 / 文件管理器 / 省电实验室 / 缓存清理
                 {R.drawable.ic_folder, R.drawable.ic_link, R.drawable.ic_folder_open,
                         R.drawable.ic_flask_conical, R.drawable.ic_trash_2},
@@ -942,9 +944,12 @@ public class NativeHome extends Activity {
                         pollGateway();
                         break;
                     case 1:
-                        showLog();
+                        FloatingBallSheet.show(this, ui);
                         break;
                     case 2:
+                        showLog();
+                        break;
+                    case 3:
                         copyGateway();
                         break;
                     default:

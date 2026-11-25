@@ -342,6 +342,72 @@ public final class Prefs {
 
     /** 莫奈取色：从系统壁纸里取强调色（Android 12+ 才有）。 */
     // ------------------------------------------------------------------
+    // 悬浮球（保活）
+    // ------------------------------------------------------------------
+
+    /** 图标模式：0=自身图标 1=自定义图片 2=透明。 */
+    public static final int BALL_ICON_DEFAULT = 0;
+    public static final int BALL_ICON_CUSTOM = 1;
+    public static final int BALL_ICON_TRANSPARENT = 2;
+
+    public static boolean ballEnabled(Context ctx) {
+        return sp(ctx).getBoolean("ball_enabled", false);
+    }
+
+    public static void setBallEnabled(Context ctx, boolean on) {
+        sp(ctx).edit().putBoolean("ball_enabled", on).apply();
+    }
+
+    public static int ballIconMode(Context ctx) {
+        int m = sp(ctx).getInt("ball_icon_mode", BALL_ICON_DEFAULT);
+        return m >= 0 && m <= 2 ? m : BALL_ICON_DEFAULT;
+    }
+
+    public static void setBallIconMode(Context ctx, int mode) {
+        sp(ctx).edit().putInt("ball_icon_mode", mode).apply();
+    }
+
+    public static String ballIconPath(Context ctx) {
+        return sp(ctx).getString("ball_icon_path", "");
+    }
+
+    public static void setBallIconPath(Context ctx, String path) {
+        sp(ctx).edit().putString("ball_icon_path", path == null ? "" : path).apply();
+    }
+
+    /** 悬浮球直径（dp），默认 40，范围 24-96。 */
+    public static int ballSizeDp(Context ctx) {
+        int v = sp(ctx).getInt("ball_size_dp", 40);
+        return v >= 24 && v <= 96 ? v : 40;
+    }
+
+    public static void setBallSizeDp(Context ctx, int dp) {
+        sp(ctx).edit().putInt("ball_size_dp", Math.max(24, Math.min(96, dp))).apply();
+    }
+
+    /** 保活窗口边长（dp），默认 1，范围 1-16。 */
+    public static int ballKeepAliveDp(Context ctx) {
+        int v = sp(ctx).getInt("ball_keep_dp", 1);
+        return v >= 1 && v <= 16 ? v : 1;
+    }
+
+    public static void setBallKeepAliveDp(Context ctx, int dp) {
+        sp(ctx).edit().putInt("ball_keep_dp", Math.max(1, Math.min(16, dp))).apply();
+    }
+
+    public static int ballX(Context ctx) {
+        return sp(ctx).getInt("ball_x", 0);
+    }
+
+    public static int ballY(Context ctx) {
+        return sp(ctx).getInt("ball_y", 400);
+    }
+
+    public static void setBallPos(Context ctx, int x, int y) {
+        sp(ctx).edit().putInt("ball_x", x).putInt("ball_y", y).apply();
+    }
+
+    // ------------------------------------------------------------------
     // 息屏省电（实验室）
     // ------------------------------------------------------------------
 

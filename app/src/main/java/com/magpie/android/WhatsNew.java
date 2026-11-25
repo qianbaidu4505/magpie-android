@@ -39,6 +39,14 @@ final class WhatsNew {
     private static final android.util.SparseArray<String[]> NOTES = new android.util.SparseArray<>();
 
     static {
+        // 206 / 1.8.26
+        NOTES.put(206, new String[]{
+                "新功能",
+                "• 新增悬浮球保活（菜单 → 网关 → 悬浮球保活）：实测部分系统设了「无限制」仍会掐断网关，加个悬浮窗后系统判定宽松很多，AI 请求不再中断",
+                "• 悬浮球图标可选：自身图标 / 相册图片 / 透明（只剩热区），大小 24-96dp 可调，可随意拖动位置，点击打开 App",
+                "• 同时挂一个隐形保活小窗口（默认 1dp，可调到 16dp），个别系统会冻结超小窗口，卡顿时调大一点",
+                "• 需要授权「显示在其他应用上层」",
+        });
         // 205 / 1.8.25
         NOTES.put(205, new String[]{
                 "新功能（实验室）",
