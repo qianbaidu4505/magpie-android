@@ -351,23 +351,26 @@ final class TraceLog {
         });
     }
 
+    /** 时间列宽：第一行时间占位、第二行信息缩进都靠它，改一处两处同步。 */
+    private static final float TIME_COL_DP = 62f;
+
     /** 一条请求：时刻 + 模型 + 耗时 / 下面一行 供应商 · Agent · token · 费用。 */
     private View row(JSONObject r) {
         LinearLayout box = ui.column();
-        // 每条请求一张小卡：发光描边 + 悬浮阴影，跟其它页面统一
-        GradientDrawable bg = ui.glowStroke(ui.col(M3.SURFACE_CONTAINER_LOW), 16,
-                ui.col(M3.OUTLINE_VARIANT), 1);
-        ui.glowCard(box, bg);
-        box.setPadding(ui.dp(12), ui.dp(10), ui.dp(12), ui.dp(10));
+        // 同质重复项不用卡片：透明底、无阴影、无发光，靠底部发丝线分隔。
+        // 每条都加 elevation 会让一屏出现十几个视觉焦点，列表一长就糊成一片。
+        box.setBackground(null);
+        box.setElevation(0);
+        box.setPadding(ui.dp(14), ui.dp(11), ui.dp(14), 0);
         LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        blp.bottomMargin = ui.dp(8);
+        blp.bottomMargin = 0;
         box.setLayoutParams(blp);
 
         LinearLayout line = ui.row();
         String time = NativeData.stamp(NativeData.str(r, "time", ""));
         TextView t = ui.mono(time.isEmpty() ? "--:--" : time, 10, M3.ON_SURFACE_VARIANT);
-        t.setLayoutParams(new LinearLayout.LayoutParams(ui.dp(62),
+        t.setLayoutParams(new LinearLayout.LayoutParams(ui.dp(TIME_COL_DP),
                 ViewGroup.LayoutParams.WRAP_CONTENT));
         line.addView(t);
 
@@ -398,7 +401,10 @@ final class TraceLog {
         box.setTag(r);
 
         // 第二行：供应商 · agent · token · 费用
+        // 四个字段如果全用同一个灰、同一个字号，用户想找「这条花了多少钱」得从头扫。
+        // 所以供应商/agent 保持弱灰，token 和费用提亮一档，一眼能定位。
         StringBuilder sb = new StringBuilder();
+        int tokStart = -1, tokEnd = -1, costStart = -1, costEnd = -1;
         String provider = NativeData.str(r, "provider", "");
         if (!provider.isEmpty()) {
             sb.append(NativeData.pretty(provider));
@@ -415,24 +421,52 @@ final class TraceLog {
             if (sb.length() > 0) {
                 sb.append(" · ");
             }
+            tokStart = sb.length();
             sb.append(NativeData.tokens(tokens)).append(" token");
+            tokEnd = sb.length();
         }
         double cost = NativeData.dec(r, "cost");
         if (cost > 0) {
             if (sb.length() > 0) {
                 sb.append(" · ");
             }
+            costStart = sb.length();
             sb.append(NativeData.cost(cost));
+            costEnd = sb.length();
         }
         if (sb.length() > 0) {
-            TextView s = ui.text(sb.toString(), 10, M3.ON_SURFACE_VARIANT, false);
+            android.text.SpannableStringBuilder rich =
+                    new android.text.SpannableStringBuilder(sb.toString());
+            int strong = ui.col(M3.ON_SURFACE);
+            if (tokStart >= 0) {
+                rich.setSpan(new android.text.style.ForegroundColorSpan(strong),
+                        tokStart, tokEnd, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+            if (costStart >= 0) {
+                rich.setSpan(new android.text.style.ForegroundColorSpan(strong),
+                        costStart, costEnd, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                rich.setSpan(new android.text.style.StyleSpan(
+                                android.graphics.Typeface.BOLD),
+                        costStart, costEnd, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+            TextView s = ui.textColor("", 10, ui.col(M3.ON_SURFACE_VARIANT), false);
+            s.setText(rich);
             LinearLayout.LayoutParams slp = ui.matchWrap(2);
-            slp.leftMargin = ui.dp(50);
+            // 和二行的时间列对齐：同一个常量，改一处两处同步（原来写死 50 差 12dp）
+            slp.leftMargin = ui.dp(TIME_COL_DP);
             s.setLayoutParams(slp);
             s.setSingleLine(true);
             s.setEllipsize(android.text.TextUtils.TruncateAt.END);
             box.addView(s);
         }
+
+        // 底部发丝线：同质列表靠它分隔，比每条一张卡干净得多
+        View hair = new View(host);
+        hair.setBackgroundColor(ui.col(M3.OUTLINE_VARIANT));
+        LinearLayout.LayoutParams hlp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, ui.dp(1)));
+        hlp.topMargin = ui.dp(11);
+        box.addView(hair, hlp);
         return box;
     }
     /** 垂直 LinearLayout 的子项必须显式给 WRAP_CONTENT，否则会和别的子项平分整屏高度。 */

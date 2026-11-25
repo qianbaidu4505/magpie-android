@@ -25,8 +25,12 @@ final class LivePanel {
     private final Ui ui;
 
     private final LinearLayout root;
-    private final TextView stats;
     private final LinearLayout body;
+
+    /** 三个运行态计数：请求 / 改道 / 错误，各自一格。 */
+    private LinearLayout statRequests;
+    private LinearLayout statRerouted;
+    private LinearLayout statErrors;
 
     private final TraceSource source = new TraceSource();
 
@@ -46,12 +50,21 @@ final class LivePanel {
 
         LinearLayout head = ui.row();
         head.setPadding(ui.dp(20), ui.dp(14), ui.dp(20), ui.dp(2));
-        head.addView(ui.text("实时 · 网关正在做的决定", 13, M3.ON_SURFACE, true),
+        head.addView(ui.text("实时 · 网关正在做的决定", 14, M3.ON_SURFACE, true),
                 ui.weight(1));
-        stats = ui.text("请求 0 · 改道 0 · 错误 0", 10.5f, M3.ON_SURFACE_VARIANT, false);
-        stats.setSingleLine(true);
-        head.addView(stats);
         root.addView(head, wrapLp());
+
+        // 三个计数拆成独立一格：它们是「运行态证据」（有没有出错），
+        // 压成一行灰字贴在标题屁股上，等于把最想确认的东西藏起来。
+        LinearLayout counters = ui.row();
+        counters.setPadding(ui.dp(20), ui.dp(8), ui.dp(20), 0);
+        statRequests = counterCell("请求", M3.ON_SURFACE);
+        statRerouted = counterCell("改道", M3.ON_SURFACE);
+        statErrors = counterCell("错误", M3.ERROR);
+        counters.addView(statRequests, ui.weight(1));
+        counters.addView(statRerouted, ui.weight(1));
+        counters.addView(statErrors, ui.weight(1));
+        root.addView(counters, wrapLp());
 
         TextView hint = ui.text("等待请求；经 agent 发出请求后，这里实时播放："
                         + "路由把谁排第一及原因、每次尝试和各自的回应。",
@@ -65,6 +78,32 @@ final class LivePanel {
         root.addView(body, wrapLp());
 
         renderEmpty();
+    }
+
+    /** 一格计数：上面大数字（tnum 等宽，数字跳不抖），下面小标签。 */
+    private LinearLayout counterCell(String label, int valueRole) {
+        LinearLayout box = ui.column();
+        TextView v = ui.text("0", 16, valueRole, true);
+        v.setFontFeatureSettings("tnum");
+        box.addView(v);
+        box.addView(ui.text(label, 10.5f, M3.ON_SURFACE_VARIANT, false));
+        return box;
+    }
+
+    /** 把某一格的大数字换掉；值没变就不动，避免每 26 秒重排一次。 */
+    private void setCounter(LinearLayout cell, int value) {
+        if (cell == null || cell.getChildCount() == 0) {
+            return;
+        }
+        android.view.View v0 = cell.getChildAt(0);
+        if (!(v0 instanceof TextView)) {
+            return;
+        }
+        TextView v = (TextView) v0;
+        String next = String.valueOf(value);
+        if (!next.contentEquals(v.getText())) {
+            v.setText(next);
+        }
     }
 
     View view() {
@@ -100,9 +139,9 @@ final class LivePanel {
 
     private void apply(JSONArray routes, JSONObject totals) {
         if (totals != null) {
-            stats.setText("请求 " + NativeData.num(totals, "requests")
-                    + " · 改道 " + NativeData.num(totals, "rerouted")
-                    + " · 错误 " + NativeData.num(totals, "errors"));
+            setCounter(statRequests, NativeData.num(totals, "requests"));
+            setCounter(statRerouted, NativeData.num(totals, "rerouted"));
+            setCounter(statErrors, NativeData.num(totals, "errors"));
         }
 
         JSONObject newest = null;

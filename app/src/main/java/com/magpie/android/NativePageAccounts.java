@@ -239,49 +239,38 @@ final class NativePageAccounts extends NativePage {
     private View summaryBar(int accounts, int providers) {
         LinearLayout card = ui.cardWithMargin();
         LinearLayout row = ui.row();
+
+        // 上面三格：纯读数，结构一致（大数字 + 小标签）
         row.addView(ui.stat(String.valueOf(accounts), "个账号", M3.ON_SURFACE, 1f));
         row.addView(ui.stat(String.valueOf(providers), "家供应商", M3.ON_SURFACE, 1f));
-        row.addView(ui.stat(String.valueOf(offProviders.size()), "家已关闭", M3.ON_SURFACE, 1f));
 
-        // 第四格：自动签到入口，两态 + 状态点。
-        // 自动签到 = 没开任何一家的开关（灰点）；已开启自动签到 = 至少一家开着（绿点）。
-        // half 是竖排容器：里面的子项千万别带 weight（竖排的 weight 分配的是
-        // 高度，width=0 会真·零宽把文字吞掉——1.8.9 第一次构建就栽在这）。
-        boolean anyOn = checkinState != null && anyCheckinOn(checkinState);
-        TextView checkin = ui.text("自动签到", 17, M3.ON_SURFACE, true);
-        checkin.setGravity(Gravity.CENTER);
-        checkin.setOnClickListener(v -> showCheckinSheet());
-        LinearLayout subRow = new LinearLayout(host);
-        subRow.setOrientation(LinearLayout.HORIZONTAL);
-        subRow.setGravity(Gravity.CENTER);
-        android.view.View dot = new android.view.View(host);
-        android.graphics.drawable.GradientDrawable dotBg = new android.graphics.drawable.GradientDrawable();
-        dotBg.setShape(android.graphics.drawable.GradientDrawable.OVAL);
-        dotBg.setColor(ui.col(anyOn ? M3.TERTIARY : M3.OUTLINE_VARIANT));
-        dot.setBackground(dotBg);
-        dot.setLayoutParams(new LinearLayout.LayoutParams(ui.dp(7), ui.dp(7)));
-        LinearLayout.LayoutParams dlp2 = (LinearLayout.LayoutParams) dot.getLayoutParams();
-        dlp2.rightMargin = ui.dp(4);
-        dlp2.gravity = android.view.Gravity.CENTER_VERTICAL;
-        subRow.addView(dot);
-        TextView sub = new TextView(host);
-        sub.setText(anyOn ? "已开启自动签到 ›" : "自动签到 ›");
-        sub.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 12);
-        sub.setTextColor(ui.col(anyOn ? M3.ON_SURFACE : M3.ON_SURFACE_VARIANT));
-        sub.setGravity(Gravity.CENTER);
-        subRow.addView(sub);
-        LinearLayout half = new LinearLayout(host);
-        half.setOrientation(LinearLayout.VERTICAL);
-        half.setGravity(Gravity.CENTER);
-        half.addView(checkin, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        half.addView(subRow, new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        half.setOnClickListener(v -> showCheckinSheet());
-        row.addView(half,
-                new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        // 已关闭：有值才用错误色强调，没值也占一格但与上面同结构，
+        // 不再让「自动签到」挤进第四格当半数字半入口的怪胎。
+        int off = offProviders.size();
+        row.addView(ui.stat(String.valueOf(off), "家已关闭",
+                off > 0 ? M3.ERROR : M3.ON_SURFACE_VARIANT, 1f));
 
         card.addView(row);
+
+        // 下面一条状态行：状态点 + 文案 + 右对齐入口。
+        // 和上面的「读数」在物理上分开，一类信息一件事。
+        boolean anyOn = checkinState != null && anyCheckinOn(checkinState);
+        LinearLayout bar = ui.row();
+        bar.setPadding(ui.dp(4), ui.dp(12), ui.dp(4), ui.dp(0));
+        bar.setClickable(true);
+        bar.setFocusable(true);
+        bar.setOnClickListener(v -> showCheckinSheet());
+
+        bar.addView(ui.dot(anyOn ? M3.TERTIARY : M3.OUTLINE_VARIANT, 6));
+        TextView sub = ui.text(anyOn ? "自动签到已开启" : "自动签到未开启", 12,
+                anyOn ? M3.ON_SURFACE : M3.ON_SURFACE_VARIANT, false);
+        LinearLayout.LayoutParams slp = ui.wrap();
+        slp.leftMargin = ui.dp(6);
+        bar.addView(sub, slp);
+        bar.addView(new View(host), ui.weight(1));
+        bar.addView(ui.text("设置 ›", 12, M3.PRIMARY, false));
+
+        card.addView(bar);
         return card;
     }
 
@@ -443,50 +432,50 @@ final class NativePageAccounts extends NativePage {
     /** 「全部展开 / 全部收起」两个小胶囊，省得一家家点。 */
     private View expandAllBar(Map<String, List<JSONObject>> byProvider) {
         LinearLayout row = ui.row();
-        row.setPadding(ui.dp(16), ui.dp(8), ui.dp(16), ui.dp(2));
-        // 小屏放不下三个胶囊时让它们自己缩，不要把「添加供应商」挤出屏幕
         row.setPadding(ui.dp(14), ui.dp(8), ui.dp(14), ui.dp(2));
 
-        TextView all = ui.pill("全部展开", M3.SURFACE_CONTAINER_HIGH, M3.ON_SURFACE);
-        all.setPadding(ui.dp(14), ui.dp(7), ui.dp(14), ui.dp(7));
-        all.setOnClickListener(v -> {
-            // 只展开到「账号列表」这一级；每张账号卡的明细保持用户自己点
-            for (String p : byProvider.keySet()) {
-                Collapse.setExpanded(host, "prov:" + p, true);
-            }
-            refresh(true);
-        });
-        row.addView(all);
-
-        TextView none = ui.pill("全部收起", M3.SURFACE_CONTAINER_HIGH, M3.ON_SURFACE);
-        none.setPadding(ui.dp(14), ui.dp(7), ui.dp(14), ui.dp(7));
-        LinearLayout.LayoutParams nlp = ui.wrap();
-        nlp.leftMargin = ui.dp(8);
-        none.setOnClickListener(v -> {
-            for (Map.Entry<String, List<JSONObject>> e : byProvider.entrySet()) {
-                Collapse.setExpanded(host, "prov:" + e.getKey(), false);
-                for (JSONObject q : e.getValue()) {
-                    Collapse.setExpanded(host, accountKey(q), false);
-                }
-            }
-            refresh(true);
-        });
-        row.addView(none, nlp);
-
-        // 手动拉取刷新模型 + 查看全部模型（替代原来的「添加供应商」）
-        TextView refreshModels = ui.pill("刷新模型", M3.SECONDARY_CONTAINER, M3.ON_SECONDARY_CONTAINER);
+        // 四颗同级胶囊挤一行，视觉重量一样，用户得读字才知道区别。
+        // 按「主操作 / 次操作 / 视图开关」三层递减，右边那颗靠位置自解释。
+        TextView refreshModels = ui.pill("刷新模型", M3.SECONDARY_CONTAINER,
+                M3.ON_SECONDARY_CONTAINER);
         refreshModels.setPadding(ui.dp(14), ui.dp(7), ui.dp(14), ui.dp(7));
-        LinearLayout.LayoutParams rlp = ui.wrap();
-        rlp.leftMargin = ui.dp(8);
         refreshModels.setOnClickListener(v -> refreshModels());
-        row.addView(refreshModels, rlp);
+        row.addView(refreshModels);
 
-        TextView allModels = ui.pill("全部模型", M3.SECONDARY_CONTAINER, M3.ON_SECONDARY_CONTAINER);
+        TextView allModels = ui.pill("全部模型", M3.SURFACE_CONTAINER_HIGH, M3.ON_SURFACE);
         allModels.setPadding(ui.dp(14), ui.dp(7), ui.dp(14), ui.dp(7));
         LinearLayout.LayoutParams mlp = ui.wrap();
         mlp.leftMargin = ui.dp(8);
         allModels.setOnClickListener(v -> showAllModels());
         row.addView(allModels, mlp);
+
+        // 展开/收起合成一颗切换胶囊，靠 spacer 顶到最右
+        row.addView(new View(host), ui.weight(1));
+
+        boolean anyExpanded = false;
+        for (String p : byProvider.keySet()) {
+            if (Collapse.expanded(host, "prov:" + p, false)) {
+                anyExpanded = true;
+                break;
+            }
+        }
+        final boolean exp = anyExpanded;
+        TextView toggle = ui.pill(exp ? "全部收起" : "全部展开",
+                M3.SURFACE_CONTAINER_HIGH, M3.ON_SURFACE_VARIANT);
+        toggle.setPadding(ui.dp(12), ui.dp(7), ui.dp(12), ui.dp(7));
+        toggle.setOnClickListener(v -> {
+            // 两层都要动：只收 prov: 层的话账号卡还是展开的，看着没反应
+            for (Map.Entry<String, List<JSONObject>> e : byProvider.entrySet()) {
+                Collapse.setExpanded(host, "prov:" + e.getKey(), !exp);
+                if (exp) {
+                    for (JSONObject q : e.getValue()) {
+                        Collapse.setExpanded(host, accountKey(q), false);
+                    }
+                }
+            }
+            refresh(true);
+        });
+        row.addView(toggle);
         return row;
     }
 
@@ -962,9 +951,12 @@ final class NativePageAccounts extends NativePage {
 
         LinearLayout card = ui.column();
         // 二级卡片：左边缩进更多，右边留短一点，视觉上是「台阶」
-        GradientDrawable bg = ui.glowStroke(ui.col(M3.SURFACE_CONTAINER), 14,
-                ui.col(M3.OUTLINE_VARIANT), 1);
-        ui.glowCard(card, bg);
+        // 二级卡只靠底色比一级深一档 + 缩进区分层级。
+        // 再加发光描边和 6dp 阴影，会和外层一级卡的阴影叠一起糊成一片。
+        GradientDrawable bg = ui.roundStroke(ui.col(M3.SURFACE_CONTAINER), 14f,
+                ui.col(M3.OUTLINE_VARIANT), 1f);
+        card.setBackground(bg);
+        card.setElevation(0);
         card.setPadding(ui.dp(12), ui.dp(10), ui.dp(10), ui.dp(10));
         LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -998,10 +990,11 @@ final class NativePageAccounts extends NativePage {
         tlp.leftMargin = ui.dp(2);
         head.addView(titleBox, tlp);
 
-        TextView name = ui.text(title, 13.5f,
+        TextView name = ui.text(title, 14f,
                 providerOff ? M3.ON_SURFACE_VARIANT : M3.ON_SURFACE, true);
         name.setSingleLine(true);
-        name.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+        // END 比 MIDDLE 好读：中间省略后只剩首尾几个字，认不出是谁
+        name.setEllipsize(android.text.TextUtils.TruncateAt.END);
         titleBox.addView(name);
 
         TextView teaser = ui.text(cardTeaser(q), 11, M3.ON_SURFACE_VARIANT, false);
@@ -1010,12 +1003,8 @@ final class NativePageAccounts extends NativePage {
         teaser.setLayoutParams(ui.matchWrap(2));
         titleBox.addView(teaser);
 
-        if (!kind.isEmpty()) {
-            head.addView(ui.pill(kindName(kind), kindBg(kind), kindFg(kind)));
-        }
-
-        // 启停：订阅账号走 POST /api/login/{on|off}，key 走 POST /api/keys/{on|off}。
-        // 关掉之后网关不会再往它发请求，额度也就不用再读。
+        // 收起态只留「停用/启用」一个胶囊 —— 它是唯一改变系统状态的操作。
+        // kind 标签和「刷新」都下沉到明细里，一行六件在窄屏上必然挤压。
         boolean on = accountIsOn(q);
         TextView toggle = ui.pill(on ? "停用" : "启用",
                 on ? M3.ERROR_CONTAINER : M3.TERTIARY_CONTAINER,
@@ -1025,22 +1014,43 @@ final class NativePageAccounts extends NativePage {
         glp.leftMargin = ui.dp(6);
         toggle.setOnClickListener(v -> toggleAccount(providerId, user, q, toggle));
         head.addView(toggle, glp);
-
-        TextView refresh = ui.pill("刷新", M3.SURFACE_CONTAINER_HIGH, M3.ON_SURFACE);
-        refresh.setPadding(ui.dp(10), ui.dp(4), ui.dp(10), ui.dp(4));
-        LinearLayout.LayoutParams rlp = ui.wrap();
-        rlp.leftMargin = ui.dp(6);
-        refresh.setOnClickListener(v -> refreshOne(providerId, user, refresh));
-        head.addView(refresh, rlp);
         card.addView(head);
 
-        // ---- 展开的明细 ----
+        // ---- 展开的明细：顶部先放 kind 标签 + 刷新额度 ----
         LinearLayout detail = ui.column();
+        detail.addView(detailActionBar(providerId, user, q, kind));
         buildDetail(q, detail);
 
         Collapse.wire(host, head, new Collapse.Unit(arrow, detail, teaser, expanded), key);
         card.addView(detail);
         return card;
+    }
+
+    /**
+     * 展开后明细顶部的一条操作行：kind 标签在左，刷新额度在右。
+     *
+     * <p>为什么把「刷新」挪进来：收起态一屏能看到十几家供应商，多一颗胶囊
+     * 就多一次视觉干扰；而刷新是深度操作，用户展开了才想刷。
+     */
+    private View detailActionBar(String providerId, String user, JSONObject q, String kind) {
+        LinearLayout bar = ui.row();
+        bar.setPadding(0, ui.dp(10), 0, ui.dp(2));
+
+        if (kind != null && !kind.isEmpty()) {
+            TextView k = ui.pill(kindName(kind), kindBg(kind), kindFg(kind));
+            k.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 10f);
+            k.setPadding(ui.dp(8), ui.dp(3), ui.dp(8), ui.dp(3));
+            bar.addView(k);
+        }
+
+        bar.addView(new View(host), ui.weight(1));
+
+        TextView refresh = ui.pill("刷新额度", M3.SURFACE_CONTAINER_HIGH, M3.ON_SURFACE);
+        refresh.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 10f);
+        refresh.setPadding(ui.dp(10), ui.dp(4), ui.dp(10), ui.dp(4));
+        refresh.setOnClickListener(v -> refreshOne(providerId, user, refresh));
+        bar.addView(refresh);
+        return bar;
     }
 
     /** 收起时那一行：余额优先，没有余额就报最紧的额度窗口。 */
