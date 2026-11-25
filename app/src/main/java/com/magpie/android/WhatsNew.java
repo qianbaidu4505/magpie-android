@@ -39,6 +39,12 @@ final class WhatsNew {
     private static final android.util.SparseArray<String[]> NOTES = new android.util.SparseArray<>();
 
     static {
+        // 204 / 1.8.24
+        NOTES.put(204, new String[]{
+                "界面",
+                "• 底部导航胶囊改成液态玻璃质感：高通透基础层 + 上亮下暗的渐变高光 + 边缘描边 + 悬浮阴影，页面内容从底下隐约透出",
+                "• 图标与胶囊圆角对齐，选中态颜色更清晰",
+        });
         // 203 / 1.8.23
         NOTES.put(203, new String[]{
                 "修复",

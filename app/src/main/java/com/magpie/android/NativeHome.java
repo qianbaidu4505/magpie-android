@@ -472,23 +472,50 @@ public class NativeHome extends Activity {
         tabBar.setOrientation(LinearLayout.HORIZONTAL);
         tabBar.setGravity(Gravity.CENTER);
 
-        // 玻璃胶囊。
+        // ===== 液态玻璃（Liquid Glass）底栏 =====
         //
-        // 关键：底色不能取 surfaceContainerHigh —— 它和页面背景本来就只差
-        // 几个色阶，铺上去就是「白底上画了个白胶囊」，看不出透明。
-        // 换成 SURFACE_BRIGHT（浅色主题是纯白，深色是很深的棕黑）配 78% 的
-        // alpha：浅底上明显提亮发白、深底上明显压暗，一眼就是一层玻璃。
+        // Android 没有「view 的背景模糊」API（RenderEffect 会把自身内容一起糊掉，
+        // 图标就成马赛克），WindowManager 的 blurBehind 只对整窗口生效。所以用
+        // 多层叠加模拟玻璃质感，四层：
+        //   ① 基础层：SURFACE_BRIGHT 高透明（约 82%），内容能从底下透出来
+        //   ② 渐变层：上亮下暗的垂直渐变，模拟玻璃的厚度与光折射
+        //   ③ 高光描边：顶部亮线 + 1dp 半透明外描边，玻璃边缘的折光
+        //   ④ 悬浮阴影：elevation，从内容上浮起
+        //
+        // 为什么用 SURFACE_BRIGHT：它随明暗主题自动切换（浅色近纯白/深色近黑），
+        // alpha 控制通透度，两套主题都成立，不用另写深色分支。
         int bright = ui.col(M3.SURFACE_BRIGHT);
-        // 不要太透：94% 不透明度，接近磨砂玻璃的那种「糊但看得见」；
-        // 真要毛玻璃效果要靠下面的 RenderEffect 模糊。
-        int glass = (bright & 0x00FFFFFF) | 0xF0000000;
-        GradientDrawable pill = ui.round(glass, 999);
-        // 描边用同一个亮色再淡一档，边缘才有玻璃的高光感
-        pill.setStroke(Math.max(1, ui.dp(1)), (bright & 0x00FFFFFF) | 0x55000000);
-        tabBar.setBackground(pill);
-        // 阴影让胶囊从内容里浮起来；elevation 要有背景才画得出来
-        tabBar.setElevation(ui.dp(10));
+        int rgb = bright & 0x00FFFFFF;
+
+        // ① 基础层：82% 不透明，页面内容从底下隐约透出
+        GradientDrawable base = ui.round(rgb | 0xD2000000, 999);
+        // ③ 外描边：极淡的亮边，玻璃边缘
+        base.setStroke(Math.max(1, ui.dp(1)), rgb | 0x70000000);
+
+        // ② 渐变层：顶部更亮（受光面）、底部略暗（背光面），做出玻璃厚度
+        GradientDrawable sheen = new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{rgb | 0x38000000, rgb | 0x08000000, 0x00000000});
+        sheen.setCornerRadius(ui.dp(999));
+
+        android.graphics.drawable.LayerDrawable layers =
+                new android.graphics.drawable.LayerDrawable(
+                        new android.graphics.drawable.Drawable[]{base, sheen});
+        // 内边距调整让高光贴在边缘（inset 0 表示不缩）
+        layers.setLayerInset(0, 0, 0, 0, 0);
+        layers.setLayerInset(1, 1, 1, 1, 1);
+
+        tabBar.setBackground(layers);
+        // ④ 悬浮阴影
+        tabBar.setElevation(ui.dp(12));
         tabBar.setClipToOutline(false);
+        tabBar.setOutlineProvider(new android.view.ViewOutlineProvider() {
+            @Override
+            public void getOutline(android.view.View v, android.graphics.Outline o) {
+                o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), v.getHeight() / 2f);
+            }
+        });
+
         int padH = ui.dp(8), padV = ui.dp(8);
         tabBar.setPadding(padH, padV, padH, padV);
 
