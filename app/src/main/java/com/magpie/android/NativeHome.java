@@ -1065,9 +1065,14 @@ public class NativeHome extends Activity {
         StringBuilder sb = new StringBuilder();
         sb.append("网关地址\n  ").append(url);
         if (secret != null && !secret.isEmpty()) {
-            sb.append("\n\n密钥\n  ").append(LanInfo.mask(secret));
+            sb.append("\n\n局域网密钥（其它设备连过来用）\n  ").append(LanInfo.mask(secret));
+            sb.append("\n\n本机调用不需要密钥（Authorization 填任意值，如 magpie）");
         } else {
-            sb.append("\n\n密钥\n  还没有（共享没开或密钥已停用）");
+            // 没开共享 ≠ 没法用：本机 127.0.0.1 调用网关接受任何值，
+            // 上游 gateway.go: "listens on loopback and accepts anything"
+            sb.append("\n\n本机调用\n  无需密钥：AI 工具的 Authorization 填任意值"
+                    + "（如 magpie），地址填上面那条即可。");
+            sb.append("\n\n局域网密钥\n  还没有（共享没开；开了才会生成给其它设备用的密钥）");
         }
 
         AlertDialog.Builder b = new AlertDialog.Builder(this)
@@ -1081,6 +1086,18 @@ public class NativeHome extends Activity {
                     cm.setPrimaryClip(ClipData.newPlainText("magpie", secret));
                 }
                 toast("已复制完整密钥");
+            });
+        } else {
+            // 没开共享时给一个「复制本机调用示例」：地址 + Authorization 一起给，
+            // 用户粘到 AI 工具配置里就能用，不用自己拼
+            b.setNeutralButton("复制本机调用", (d, w) -> {
+                String example = "网关地址: " + url + "\n"
+                        + "Authorization: Bearer magpie  （本机调用，值任意）";
+                ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                if (cm != null) {
+                    cm.setPrimaryClip(ClipData.newPlainText("magpie", example));
+                }
+                toast("已复制地址和调用说明");
             });
         }
         b.setNegativeButton("关闭", null);

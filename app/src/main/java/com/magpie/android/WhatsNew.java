@@ -39,6 +39,12 @@ final class WhatsNew {
     private static final android.util.SparseArray<String[]> NOTES = new android.util.SparseArray<>();
 
     static {
+        // 200 / 1.8.20
+        NOTES.put(200, new String[]{
+                "优化",
+                "• 网关信息弹窗：没开局域网共享时不再误导性显示「还没有密钥」——本机调用本来就不需要密钥（Authorization 填任意值如 magpie）",
+                "• 新增「复制本机调用」按钮：地址+调用说明一键复制，粘到 AI 工具配置里就能用",
+        });
         // 199 / 1.8.19
         NOTES.put(199, new String[]{
                 "修复",
