@@ -80,10 +80,20 @@ echo "android.jar: $ANDROID_JAR"
 echo "build-tools: $BT"
 
 # --- 二进制 ---------------------------------------------------------
-
-if [ ! -f app/src/main/assets/bin/magpie.bin ]; then
-    echo "assets 里没有二进制，先跑 scripts/build-magpie.sh + scripts/sync-binary.sh" >&2
-    die "缺 app/src/main/assets/bin/magpie.bin"
+# SKIP_KERNEL=1：打「壳子包」（不含 98MB 内核）。手机上已有内核
+# （files/magpie/magpie 存在，ensureBinary 绝不覆盖）时直接覆盖装壳包即可，
+# 内核保持不变——日常 UI 迭代用这个，不用每次传 99MB。
+# 正式发布不带此变量（合内核整包）。
+if [ "${SKIP_KERNEL:-0}" = "1" ]; then
+    echo "→ SKIP_KERNEL=1：打壳子包（不含内核），产物名加 -shell 后缀"
+    OUT_SUFFIX="-shell"
+else
+    if [ ! -f app/src/main/assets/bin/magpie.bin ]; then
+        echo "assets 里没有二进制，先跑 scripts/build-magpie.sh + scripts/sync-binary.sh" >&2
+        echo "（或 SKIP_KERNEL=1 打壳子包）" >&2
+        die "缺 app/src/main/assets/bin/magpie.bin"
+    fi
+    OUT_SUFFIX=""
 fi
 
 # --- 资源 -----------------------------------------------------------
@@ -165,8 +175,12 @@ with zipfile.ZipFile(base) as zin, zipfile.ZipFile(out, 'w') as zout:
     with open(os.path.join(root, 'app/src/main/assets/MAGPIE_LICENSE.txt'), 'rb') as f:
         zout.writestr(zipfile.ZipInfo('assets/MAGPIE_LICENSE.txt', (2026, 1, 1, 0, 0, 0)), f.read(), zipfile.ZIP_DEFLATED)
     # 二进制：不压缩，首启是拷贝而不是解压（aaptOptions noCompress "bin" 同义）
-    with open(os.path.join(root, 'app/src/main/assets/bin/magpie.bin'), 'rb') as f:
-        zout.writestr(zipfile.ZipInfo('assets/bin/magpie.bin', (2026, 1, 1, 0, 0, 0)), f.read(), zipfile.ZIP_STORED)
+    # SKIP_KERNEL=1（壳子包）时不写内核——手机上已装的内核不会被覆盖
+    if os.path.exists(os.path.join(root, 'app/src/main/assets/bin/magpie.bin')):
+        with open(os.path.join(root, 'app/src/main/assets/bin/magpie.bin'), 'rb') as f:
+            zout.writestr(zipfile.ZipInfo('assets/bin/magpie.bin', (2026, 1, 1, 0, 0, 0)), f.read(), zipfile.ZIP_STORED)
+    else:
+        print('    （壳子包：不含内核）')
 print('   ', out, os.path.getsize(out), 'bytes')
 PY
 
@@ -187,7 +201,7 @@ if [ ! -f "$KEYSTORE" ]; then
         -dname "CN=Android Debug,O=Android,C=US" >/dev/null 2>&1
 fi
 
-APK="$OUT_DIR/magpie-android-$VERSION_NAME.apk"
+APK="$OUT_DIR/magpie-android-$VERSION_NAME${OUT_SUFFIX}.apk"
 echo "→ apksigner"
 "$JAVA" -jar "$BT/lib/apksigner.jar" sign \
     --ks "$KEYSTORE" --ks-pass "pass:$KS_PASS" --key-pass "pass:$KS_PASS" \

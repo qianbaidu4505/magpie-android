@@ -628,6 +628,22 @@ public class GatewayService extends Service {
             return dst;
         }
 
+        // 壳子包（SKIP_KERNEL=1 构建产物）里没有 assets/bin/magpie.bin：
+        // 手机上又没有已装内核 → 明确报错，而不是 AssetsNotFoundException 崩
+        boolean hasAsset = true;
+        try {
+            ctx.getAssets().open(ASSET).close();
+        } catch (java.io.FileNotFoundException e) {
+            hasAsset = false;
+        } catch (IOException e) {
+            hasAsset = false;
+        }
+        if (!hasAsset) {
+            throw new IOException(
+                    "这个安装包是壳子包（不含内核），而手机上没有已安装的内核。"
+                    + "请先安装完整版（内含内核），或在设置里完成内核更新后再使用。");
+        }
+
         File tmp = new File(root, "magpie.tmp");
         long n = 0;
         try (InputStream in = new BufferedInputStream(ctx.getAssets().open(ASSET), 1 << 16);

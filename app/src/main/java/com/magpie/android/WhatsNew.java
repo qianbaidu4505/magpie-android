@@ -43,6 +43,7 @@ final class WhatsNew {
         NOTES.put(199, new String[]{
                 "修复",
                 "• 概览页滚到底时，「账号额度」等末尾标题会从底部导航胶囊下方露出一条——底部留白加大安全余量（REDMI K90 Pro Max 反馈）",
+                "• 支持壳子包（不含内核的轻量安装包）：已有内核的手机直接覆盖装，UI 更新不再重复下 99MB",
         });
         // 198 / 1.8.18
         NOTES.put(198, new String[]{
