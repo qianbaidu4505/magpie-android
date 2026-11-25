@@ -358,6 +358,15 @@ public final class Prefs {
         sp(ctx).edit().putBoolean("ball_enabled", on).apply();
     }
 
+    /** 保活小窗口单独开关（跟悬浮球独立）。 */
+    public static boolean keepAliveEnabled(Context ctx) {
+        return sp(ctx).getBoolean("keepalive_enabled", false);
+    }
+
+    public static void setKeepAliveEnabled(Context ctx, boolean on) {
+        sp(ctx).edit().putBoolean("keepalive_enabled", on).apply();
+    }
+
     public static int ballIconMode(Context ctx) {
         int m = sp(ctx).getInt("ball_icon_mode", BALL_ICON_DEFAULT);
         return m >= 0 && m <= 2 ? m : BALL_ICON_DEFAULT;

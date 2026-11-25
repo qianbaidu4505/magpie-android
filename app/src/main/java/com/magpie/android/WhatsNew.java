@@ -39,6 +39,12 @@ final class WhatsNew {
     private static final android.util.SparseArray<String[]> NOTES = new android.util.SparseArray<>();
 
     static {
+        // 207 / 1.8.27
+        NOTES.put(207, new String[]{
+                "改进",
+                "• 悬浮球与保活窗口改为各带独立开关（可以只开其中一个）",
+                "• 悬浮球设置页重新设计：顶部说明卡 + 两张能力卡（悬浮球 / 保活窗口），参数行改成「标题+说明+右侧值胶囊」，点胶囊即改",
+        });
         // 206 / 1.8.26
         NOTES.put(206, new String[]{
                 "新功能",

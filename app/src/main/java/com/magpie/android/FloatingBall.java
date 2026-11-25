@@ -76,12 +76,33 @@ final class FloatingBall {
         return ballView != null;
     }
 
-    /**
-     * 显示悬浮球（+ 保活窗口）。
-     *
-     * @return null 成功，否则错误说明
-     */
-    static String show(Context ctx) {
+    /** 按当前设置同步显示状态（悬浮球与保活窗口各自独立开关）。 */
+    static void sync(Context ctx) {
+        if (!canDraw(ctx)) {
+            hideBall();
+            hideKeepAlive();
+            return;
+        }
+        if (wm == null) {
+            wm = (WindowManager) ctx.getSystemService(Context.WINDOW_SERVICE);
+        }
+        if (wm == null) {
+            return;
+        }
+        if (Prefs.ballEnabled(ctx)) {
+            showBall(ctx);
+        } else {
+            hideBall();
+        }
+        if (Prefs.keepAliveEnabled(ctx)) {
+            showKeepAlive(ctx);
+        } else {
+            hideKeepAlive();
+        }
+    }
+
+    /** 只显示悬浮球。 @return null 成功，否则错误说明 */
+    static String showBall(Context ctx) {
         if (ballView != null) {
             return null;
         }
@@ -89,12 +110,48 @@ final class FloatingBall {
             return "没有悬浮窗权限";
         }
         try {
-            wm = (WindowManager) ctx.getSystemService(Context.WINDOW_SERVICE);
+            if (wm == null) {
+                wm = (WindowManager) ctx.getSystemService(Context.WINDOW_SERVICE);
+            }
             if (wm == null) {
                 return "拿不到 WindowManager";
             }
+            int size = Prefs.ballSizeDp(ctx);
+            ballView = buildBall(ctx, size);
+            ballLp = new WindowManager.LayoutParams(
+                    dp(ctx, size), dp(ctx, size),
+                    overlayType(),
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                            | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                    PixelFormat.TRANSLUCENT);
+            ballLp.gravity = Gravity.TOP | Gravity.START;
+            ballLp.x = Prefs.ballX(ctx);
+            ballLp.y = Prefs.ballY(ctx);
+            wm.addView(ballView, ballLp);
+            Log.i(TAG, "悬浮球已显示 size=" + size + "dp");
+            return null;
+        } catch (Exception e) {
+            Log.w(TAG, "showBall failed: " + e);
+            hideBall();
+            return e.getMessage() == null ? e.toString() : e.getMessage();
+        }
+    }
 
-            // ---- 保活小窗口：1dp（可调），完全透明、不拦截触摸 ----
+    /** 只显示保活小窗口。 @return null 成功，否则错误说明 */
+    static String showKeepAlive(Context ctx) {
+        if (keepAliveView != null) {
+            return null;
+        }
+        if (!canDraw(ctx)) {
+            return "没有悬浮窗权限";
+        }
+        try {
+            if (wm == null) {
+                wm = (WindowManager) ctx.getSystemService(Context.WINDOW_SERVICE);
+            }
+            if (wm == null) {
+                return "拿不到 WindowManager";
+            }
             int keepDp = Prefs.ballKeepAliveDp(ctx);
             keepAliveView = new View(ctx);
             keepAliveView.setBackgroundColor(Color.TRANSPARENT);
@@ -109,46 +166,48 @@ final class FloatingBall {
             keepLp.x = 0;
             keepLp.y = 0;
             wm.addView(keepAliveView, keepLp);
-
-            // ---- 悬浮球 ----
-            int size = Prefs.ballSizeDp(ctx);
-            ballView = buildBall(ctx, size);
-            ballLp = new WindowManager.LayoutParams(
-                    dp(ctx, size), dp(ctx, size),
-                    overlayType(),
-                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                            | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-                    PixelFormat.TRANSLUCENT);
-            ballLp.gravity = Gravity.TOP | Gravity.START;
-            ballLp.x = Prefs.ballX(ctx);
-            ballLp.y = Prefs.ballY(ctx);
-            wm.addView(ballView, ballLp);
-
-            Log.i(TAG, "悬浮球已显示 size=" + size + "dp keep=" + keepDp + "dp");
+            Log.i(TAG, "保活窗口已显示 " + keepDp + "dp");
             return null;
         } catch (Exception e) {
-            Log.w(TAG, "show failed: " + e);
-            hide();
+            Log.w(TAG, "showKeepAlive failed: " + e);
+            hideKeepAlive();
             return e.getMessage() == null ? e.toString() : e.getMessage();
         }
     }
 
-    static void hide() {
+    static void hideBall() {
         try {
-            if (wm != null) {
-                if (ballView != null) {
-                    wm.removeView(ballView);
-                }
-                if (keepAliveView != null) {
-                    wm.removeView(keepAliveView);
-                }
+            if (wm != null && ballView != null) {
+                wm.removeView(ballView);
             }
         } catch (Exception ignored) {
         }
         ballView = null;
-        keepAliveView = null;
         ballLp = null;
+    }
+
+    static void hideKeepAlive() {
+        try {
+            if (wm != null && keepAliveView != null) {
+                wm.removeView(keepAliveView);
+            }
+        } catch (Exception ignored) {
+        }
+        keepAliveView = null;
         keepLp = null;
+    }
+
+    static void hide() {
+        hideBall();
+        hideKeepAlive();
+    }
+
+    static boolean ballShowing() {
+        return ballView != null;
+    }
+
+    static boolean keepAliveShowing() {
+        return keepAliveView != null;
     }
 
     /** 悬浮球视图：圆形底 + 图标（图片/自身 logo/透明）。可拖动，点击开 App。 */
@@ -237,13 +296,11 @@ final class FloatingBall {
         return iv;
     }
 
-    /** 参数改了以后刷新（大小/图标）。 */
+    /** 参数改了以后刷新（大小/图标/开关）。 */
     static void refresh(Context ctx) {
-        if (!isShowing()) {
-            return;
-        }
-        hide();
-        show(ctx);
+        hideBall();
+        hideKeepAlive();
+        sync(ctx);
     }
 
     private static int overlayType() {

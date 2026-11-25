@@ -23,8 +23,8 @@ android {
         targetSdk 28
         minSdk 24
 
-        versionCode 206
-        versionName "1.8.26"
+        versionCode 207
+        versionName "1.8.27"
         resValue "string", "default_port", "3425"
     }
 
