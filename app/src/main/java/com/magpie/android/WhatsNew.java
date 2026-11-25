@@ -39,6 +39,12 @@ final class WhatsNew {
     private static final android.util.SparseArray<String[]> NOTES = new android.util.SparseArray<>();
 
     static {
+        // 205 / 1.8.25
+        NOTES.put(205, new String[]{
+                "新功能（实验室）",
+                "• 省电策略实验室新增「息屏闲置后释放 CPU 唤醒锁」：开启后，息屏且连续没有 AI 请求超过设定时间（默认 10 分钟，可调 1-240），自动释放唤醒锁让手机深度休眠；一亮屏或新请求进来立刻恢复",
+                "• 代价说明：息屏期间第一个请求可能慢一点（等 CPU 唤醒），偶发超时会重试一次。开关在 菜单 → 插件 → 省电策略实验室",
+        });
         // 204 / 1.8.24
         NOTES.put(204, new String[]{
                 "界面",

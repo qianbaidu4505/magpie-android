@@ -76,6 +76,14 @@ public class GatewayService extends Service {
     private static final StringBuilder tail = new StringBuilder();
 
     private static volatile PowerManager.WakeLock wakeLock;
+    /** 最近一次网关活动（有日志输出）的时间戳，休眠守夜用它判断「多久没动静」。 */
+    private static volatile long lastActivityAt = System.currentTimeMillis();
+    /** 休眠守夜线程在跑（避免重复起）。 */
+    private static volatile boolean sleeperRunning;
+    /** 息屏状态（壳自己维护，避免读 PowerManager 在不同 ROM 上的坑）。 */
+    private static volatile boolean screenOff;
+    /** 休眠守夜监测的注册器，Service 停止时取消。 */
+    private static android.content.BroadcastReceiver screenReceiver;
 
     private final AtomicBoolean stopping = new AtomicBoolean(false);
     /** 重启一次只跑一条线：以前两次 restart 挨着来，两个进程会抢同一个端口。 */
@@ -388,6 +396,7 @@ public class GatewayService extends Service {
         }, "magpie-autoclean").start();
 
         acquireWakeLock(ctx);
+        startWakeSleeper(ctx);
 
         final Process child = p;
         Thread lt = new Thread(() -> pumpLog(ctx, child), "magpie-log");
@@ -410,6 +419,7 @@ public class GatewayService extends Service {
                 new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
             while ((line = r.readLine()) != null) {
+                lastActivityAt = System.currentTimeMillis();
                 appendLog(line);
                 Log.i(TAG, line);
             }
@@ -573,6 +583,7 @@ public class GatewayService extends Service {
             p.destroy();
         }
         LocalProxy.stop();
+        stopWakeSleeper(this);
         releaseWakeLock();
     }
 
@@ -1073,6 +1084,105 @@ public class GatewayService extends Service {
                 wakeLock.release();
             }
         } catch (Exception ignored) {
+        }
+    }
+
+    /**
+     * 息屏省电（实验室功能）：息屏后如果连续 N 分钟没有网关活动，就主动释放
+     * CPU 唤醒锁让手机深度休眠；一旦亮屏立刻重新持有。
+     *
+     * <p>为什么这么设计：网关要随时响应 AI 工具请求，所以默认一直持有
+     * PARTIAL_WAKE_LOCK。但很多人晚上睡觉不用，整夜抱着唤醒锁纯浪费。
+     * 折中方案——息屏且闲置够久就放开，亮屏马上恢复，代价只是「息屏期间
+     * 首次请求可能慢一点（等 CPU 唤醒）」，甚至失败重试一次就过。
+     *
+     * <p>监控活动的方式：网关每处理一个请求都会往 stdout 打日志，pumpLog
+     * 每读到一行就刷新 {@link #lastActivityAt}，所以「有没有 AI 请求」等价于
+     * 「日志多久没新行」。
+     *
+     * <p>开关与阈值在设置 → 省电策略实验室里配（{@link Prefs}），默认关闭。
+     */
+    private static void startWakeSleeper(final Context ctx) {
+        if (sleeperRunning) {
+            return;
+        }
+        if (!Prefs.wakeSaverEnabled(ctx)) {
+            return;
+        }
+        sleeperRunning = true;
+
+        // 息屏/亮屏广播：壳自己维护状态，比轮询 isInteractive 稳
+        if (screenReceiver == null) {
+            screenReceiver = new android.content.BroadcastReceiver() {
+                @Override
+                public void onReceive(Context c, android.content.Intent in) {
+                    String a = in == null ? "" : in.getAction();
+                    if (android.content.Intent.ACTION_SCREEN_OFF.equals(a)) {
+                        screenOff = true;
+                        lastActivityAt = System.currentTimeMillis();
+                    } else if (android.content.Intent.ACTION_SCREEN_ON.equals(a)) {
+                        screenOff = false;
+                        // 亮屏立刻恢复唤醒锁
+                        acquireWakeLock(c);
+                    }
+                }
+            };
+            android.content.IntentFilter f = new android.content.IntentFilter();
+            f.addAction(android.content.Intent.ACTION_SCREEN_OFF);
+            f.addAction(android.content.Intent.ACTION_SCREEN_ON);
+            try {
+                ctx.registerReceiver(screenReceiver, f);
+            } catch (Exception ignored) {
+            }
+        }
+
+        Thread t = new Thread(() -> {
+            while (sleeperRunning) {
+                try {
+                    Thread.sleep(30_000); // 30 秒看一次，够用且省电
+                } catch (InterruptedException e) {
+                    return;
+                }
+                try {
+                    int minutes = Prefs.wakeSaverMinutes(ctx);
+                    if (minutes <= 0 || !screenOff) {
+                        continue;
+                    }
+                    long idleMs = System.currentTimeMillis() - lastActivityAt;
+                    if (idleMs >= minutes * 60_000L) {
+                        if (wakeLock != null && wakeLock.isHeld()) {
+                            releaseWakeLock();
+                            appendLog("息屏闲置 " + minutes + " 分钟，已释放 CPU 唤醒锁（亮屏或新请求后恢复）");
+                        }
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        }, "magpie-wake-sleeper");
+        t.setDaemon(true);
+        t.start();
+        appendLog("息屏省电已启用：闲置 " + Prefs.wakeSaverMinutes(ctx) + " 分钟后释放唤醒锁");
+    }
+
+    private static void stopWakeSleeper(Context ctx) {
+        sleeperRunning = false;
+        if (screenReceiver != null) {
+            try {
+                ctx.unregisterReceiver(screenReceiver);
+            } catch (Exception ignored) {
+            }
+            screenReceiver = null;
+        }
+        screenOff = false;
+    }
+
+    /** 有新请求进来时（pumpLog 看到新日志）如果唤醒锁被省电放掉了，重新拿。 */
+    private static void ensureWakeLockForActivity(Context ctx) {
+        if (!Prefs.wakeSaverEnabled(ctx)) {
+            return;
+        }
+        if (wakeLock != null && !wakeLock.isHeld()) {
+            acquireWakeLock(ctx);
         }
     }
 

@@ -103,6 +103,78 @@ final class PowerLab {
         refresh.setLayoutParams(rlp);
         root.addView(refresh);
 
+        // ---- 息屏省电（实验室）----
+        root.addView(sectionTitle(act, ui, "息屏省电（实验）"));
+
+        TextView wsHint = ui.text("网关运行时一直持有 CPU 唤醒锁（否则息屏后 AI 请求会断）。"
+                        + "打开这项后：息屏且连续没有 AI 请求超过设定时间，就释放唤醒锁让手机深度休眠；"
+                        + "一亮屏或新请求进来立刻恢复。\n"
+                        + "代价：息屏期间第一个请求可能慢一点（等 CPU 醒），偶发超时重试一次即可。",
+                11.5f, M3.ON_SURFACE_VARIANT, false);
+        wsHint.setLineSpacing(ui.dp(2), 1f);
+        wsHint.setLayoutParams(ui.matchWrap(8));
+        root.addView(wsHint);
+
+        final android.widget.Switch wsSw = new android.widget.Switch(act);
+        wsSw.setText("息屏闲置后释放 CPU 唤醒锁");
+        wsSw.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 13.5f);
+        wsSw.setTextColor(ui.col(M3.ON_SURFACE));
+        wsSw.setChecked(Prefs.wakeSaverEnabled(act));
+        root.addView(wsSw);
+
+        final TextView wsMin = ui.text("", 11.5f, M3.ON_SURFACE_VARIANT, false);
+        wsMin.setLayoutParams(ui.matchWrap(6));
+        root.addView(wsMin);
+
+        final TextView wsMinBtn = ui.pill(Prefs.wakeSaverMinutes(act) + " 分钟",
+                M3.SURFACE_CONTAINER_HIGH, M3.ON_SURFACE);
+        wsMinBtn.setPadding(ui.dp(14), ui.dp(7), ui.dp(14), ui.dp(7));
+        LinearLayout.LayoutParams wmlp = ui.matchWrap(8);
+        wsMinBtn.setLayoutParams(wmlp);
+        root.addView(wsMinBtn);
+
+        final Runnable wsUpdate = () -> {
+            boolean on = Prefs.wakeSaverEnabled(act);
+            wsMin.setText(on
+                    ? "当前：息屏且闲置超过 " + Prefs.wakeSaverMinutes(act)
+                      + " 分钟就释放唤醒锁，亮屏立即恢复。重启网关后生效。"
+                    : "当前：关闭。网关会一直持有唤醒锁以保证息屏后仍能响应请求。");
+            wsMinBtn.setEnabled(on);
+            wsMinBtn.setAlpha(on ? 1f : 0.5f);
+        };
+        wsUpdate.run();
+
+        wsSw.setOnCheckedChangeListener((b, checked) -> {
+            Prefs.setWakeSaverEnabled(act, checked);
+            wsUpdate.run();
+            android.widget.Toast.makeText(act,
+                    checked ? "已开启，重启网关后生效" : "已关闭",
+                    android.widget.Toast.LENGTH_SHORT).show();
+        });
+        wsMinBtn.setOnClickListener(v -> {
+            final android.widget.EditText input = new android.widget.EditText(act);
+            input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+            input.setText(String.valueOf(Prefs.wakeSaverMinutes(act)));
+            input.setTextSize(13f);
+            input.setHint("分钟（1-240）");
+            android.app.AlertDialog dd = new android.app.AlertDialog.Builder(act)
+                    .setTitle("闲置多少分钟后释放")
+                    .setView(input)
+                    .setPositiveButton("保存", (d, w) -> {
+                        try {
+                            int m = Integer.parseInt(input.getText().toString().trim());
+                            Prefs.setWakeSaverMinutes(act, m);
+                            wsMinBtn.setText(Prefs.wakeSaverMinutes(act) + " 分钟");
+                            wsUpdate.run();
+                        } catch (Exception ignored) {
+                        }
+                    })
+                    .setNegativeButton("取消", null)
+                    .create();
+            styleDialog(act, ui, dd);
+            dd.show();
+        });
+
         // ---- 二、adb / Shizuku 命令 ----
         root.addView(sectionTitle(act, ui, "adb / Shizuku 命令"));
 

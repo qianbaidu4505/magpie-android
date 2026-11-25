@@ -341,6 +341,29 @@ public final class Prefs {
     }
 
     /** 莫奈取色：从系统壁纸里取强调色（Android 12+ 才有）。 */
+    // ------------------------------------------------------------------
+    // 息屏省电（实验室）
+    // ------------------------------------------------------------------
+
+    /** 息屏闲置后释放 CPU 唤醒锁（默认关）。 */
+    public static boolean wakeSaverEnabled(Context ctx) {
+        return sp(ctx).getBoolean("wake_saver", false);
+    }
+
+    public static void setWakeSaverEnabled(Context ctx, boolean on) {
+        sp(ctx).edit().putBoolean("wake_saver", on).apply();
+    }
+
+    /** 闲置多少分钟后释放（默认 10，范围 1-240）。 */
+    public static int wakeSaverMinutes(Context ctx) {
+        int m = sp(ctx).getInt("wake_saver_minutes", 10);
+        return m >= 1 && m <= 240 ? m : 10;
+    }
+
+    public static void setWakeSaverMinutes(Context ctx, int m) {
+        sp(ctx).edit().putInt("wake_saver_minutes", Math.max(1, Math.min(240, m))).apply();
+    }
+
     public static boolean monet(Context ctx) {
         return sp(ctx).getBoolean("monet", false);
     }
