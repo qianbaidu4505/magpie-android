@@ -39,6 +39,11 @@ final class WhatsNew {
     private static final android.util.SparseArray<String[]> NOTES = new android.util.SparseArray<>();
 
     static {
+        // 203 / 1.8.23
+        NOTES.put(203, new String[]{
+                "修复",
+                "• 修复部分矢量图标渲染为空白（路由页签图标消失）——SVG 圆弧命令的标志位连写没被正确拆分，已重写转换器并重新生成全部 47 个图标",
+        });
         // 202 / 1.8.22
         NOTES.put(202, new String[]{
                 "界面",
