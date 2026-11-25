@@ -33,8 +33,68 @@ import java.util.List;
 final class CacheCleaner {
 
     private static final String TAG = "MagpieCache";
+    private static final String PREF = "cache_cleaner";
+    private static final String KEY_INTERVAL_DAYS = "interval_days";   // 0=关
+    private static final String KEY_LAST_RUN = "last_run";
 
     private CacheCleaner() {
+    }
+
+    // ==================================================================
+    // 定时清理
+    // ==================================================================
+
+    /** 自动清理间隔（天），0=关。 */
+    static int intervalDays(Context ctx) {
+        return ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+                .getInt(KEY_INTERVAL_DAYS, 0);
+    }
+
+    static void setIntervalDays(Context ctx, int days) {
+        ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+                .edit().putInt(KEY_INTERVAL_DAYS, days).apply();
+    }
+
+    /** 上次自动清理时间（毫秒），0=从没跑过。 */
+    static long lastRun(Context ctx) {
+        return ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).getLong(KEY_LAST_RUN, 0);
+    }
+
+    /**
+     * 网关起来后调一次：到点了就静默清一轮「可再生」项（索引/残留/旧 Bun），
+     * 不动生成的图/视频（可能唯一副本）。清完记时间。
+     *
+     * @return 实际清理的项数；-1=没到时间或功能关着
+     */
+    static int autoCleanIfDue(Context ctx) {
+        int days = intervalDays(ctx);
+        if (days <= 0) {
+            return -1;
+        }
+        long last = lastRun(ctx);
+        long now = System.currentTimeMillis();
+        if (last != 0 && now - last < days * 86_400_000L) {
+            return -1;
+        }
+        List<Target> ts = targets(ctx);
+        int n = 0;
+        long freed = 0;
+        for (Target t : ts) {
+            // 只清可再生类：自动清理不碰生成的图/视频和识图缓存（损失不可逆）
+            if (t.label.startsWith("生成图") || t.label.startsWith("识图缓存")) {
+                continue;
+            }
+            long sz = sizeOf(t.path);
+            delete(t.path);
+            if (!t.path.exists()) {
+                freed += sz;
+                n++;
+            }
+        }
+        ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+                .edit().putLong(KEY_LAST_RUN, now).apply();
+        android.util.Log.i(TAG, "定时清理: " + n + " 项, 释放 " + human(freed));
+        return n;
     }
 
     // ==================================================================
@@ -50,6 +110,8 @@ final class CacheCleaner {
         final boolean dir;
         /** 算出来之前是 -1。 */
         long size = -1;
+        /** 勾选状态（UI 用，默认全选）。 */
+        boolean selected = true;
 
         Target(String label, String note, File path, boolean dir) {
             this.label = label;
@@ -124,6 +186,56 @@ final class CacheCleaner {
             File p = new File(root, f[0]);
             if (p.exists() && p.isFile()) {
                 out.add(new Target(f[1], f[0] + " · " + f[2], p, false));
+            }
+        }
+
+        // 5. 生成的图片/视频（AI 画的，永久保存没有任何自动清理）
+        File home = GatewayService.homeDir(ctx);
+        String[][] genDirs = {
+                {"generated-images", "AI 生成的图片 · Agent 工作目录下"},
+                {"generated-videos", "AI 生成的视频 · Agent 工作目录下"},
+        };
+        for (String[] g : genDirs) {
+            File d = new File(home, g[0]);
+            if (d.isDirectory()) {
+                out.add(new Target("生成图 " + g[0].replace("generated-", ""),
+                        g[1] + " · 厂商 URL 过期后这些是唯一副本，删前想清楚", d, true));
+            }
+        }
+        // ~/Pictures/Magpie（Agent 在 HOME 根跑时的兜底目录）
+        File pics = new File(home, "Pictures/Magpie");
+        if (pics.isDirectory()) {
+            out.add(new Target("生成图 Pictures/Magpie",
+                    "Agent 在 HOME 根目录跑时的图片兜底目录", pics, true));
+        }
+
+        // 6. 插件工作目录（plugin-work，一般很小但可能残留）
+        File pw = new File(root.getParentFile(), "plugin-work");
+        if (pw.isDirectory()) {
+            long sz = sizeOf(pw);
+            if (sz > 1024 * 1024) { // 超过 1MB 才列
+                out.add(new Target("插件工作目录",
+                        "插件运行时的临时工作区 · 超过 1MB 才列出", pw, true));
+            }
+        }
+
+        // 7. 图标缓存（icons 目录会随供应商数量增长）
+        File icons = new File(root.getParentFile(), "icons");
+        if (icons.isDirectory()) {
+            long sz = sizeOf(icons);
+            if (sz > 5 * 1024 * 1024) { // 超过 5MB 才列
+                out.add(new Target("图标缓存",
+                        "供应商图标 · 清了会重新拉，超过 5MB 才列出", icons, true));
+            }
+        }
+
+        // 8. vision 缓存（识图缓存，会一直增长）
+        File vc = new File(root.getParentFile(), "vision-cache.jsonl");
+        if (vc.isFile()) {
+            long sz = vc.length();
+            if (sz > 1024 * 1024) { // 超过 1MB 才列
+                out.add(new Target("识图缓存",
+                        "图片识别结果缓存 · 清了下次识图重新算，超过 1MB 才列出", vc, false));
             }
         }
 
@@ -261,15 +373,83 @@ final class CacheCleaner {
         listBox.setLayoutParams(ui.matchWrap(4));
         root.addView(listBox);
 
-        // ---- 三、清理 ----
-        root.addView(sectionTitle(act, ui, "一键清理"));
-        TextView hint = ui.text("删掉上面列出的全部项目。清理过程中界面会卡一下，属正常。",
+        // ---- 定时清理 ----
+        root.addView(sectionTitle(act, ui, "定时清理"));
+        final android.widget.TextView autoHint = ui.text("", 11.5f,
+                M3.ON_SURFACE_VARIANT, false);
+        autoHint.setLineSpacing(ui.dp(2), 1f);
+        autoHint.setLayoutParams(ui.matchWrap(6));
+        root.addView(autoHint);
+
+        Runnable updateAutoHint = () -> {
+            int days = intervalDays(act);
+            if (days <= 0) {
+                autoHint.setText("当前：关闭。开启后每隔设定天数自动清一轮可再生项"
+                        + "（索引/残留/旧 Bun），不碰生成的图和识图缓存。");
+            } else {
+                long last = lastRun(act);
+                String lastS = last == 0 ? "还没跑过"
+                        : new java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.US)
+                                .format(new java.util.Date(last));
+                autoHint.setText("当前：每 " + days + " 天自动清一轮（上次 " + lastS + "）。");
+            }
+        };
+        updateAutoHint.run();
+
+        LinearLayout autoRow = ui.row();
+        final android.widget.Switch autoSw = new android.widget.Switch(act);
+        autoSw.setText("开启定时清理");
+        autoSw.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 13.5f);
+        autoSw.setTextColor(ui.col(M3.ON_SURFACE));
+        autoSw.setChecked(intervalDays(act) > 0);
+        autoRow.addView(autoSw, ui.weight(1));
+
+        final android.widget.TextView daysBtn = ui.pill(
+                intervalDays(act) > 0 ? intervalDays(act) + " 天" : "间隔",
+                M3.SURFACE_CONTAINER_HIGH, M3.ON_SURFACE);
+        daysBtn.setPadding(ui.dp(14), ui.dp(7), ui.dp(14), ui.dp(7));
+        daysBtn.setOnClickListener(v -> {
+            final android.widget.EditText input = new android.widget.EditText(act);
+            input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+            input.setHint("天数（1-90）");
+            input.setText(String.valueOf(Math.max(1, intervalDays(act))));
+            input.setTextSize(13f);
+            AlertDialog dd = new AlertDialog.Builder(act)
+                    .setTitle("自动清理间隔（天）")
+                    .setView(input)
+                    .setPositiveButton("保存", (d, w) -> {
+                        try {
+                            int days = Integer.parseInt(input.getText().toString().trim());
+                            days = Math.max(1, Math.min(90, days));
+                            setIntervalDays(act, days);
+                            autoSw.setChecked(true);
+                            updateAutoHint.run();
+                        } catch (Exception ignored) {
+                        }
+                    })
+                    .setNegativeButton("取消", null)
+                    .create();
+            styleDialog(act, ui, dd);
+            dd.show();
+        });
+        autoRow.addView(daysBtn);
+        root.addView(autoRow);
+        autoSw.setOnCheckedChangeListener((b, checked) -> {
+            setIntervalDays(act, checked ? 7 : 0);
+            daysBtn.setText(checked ? "7 天" : "间隔");
+            updateAutoHint.run();
+        });
+
+        // ---- 三、清理（勾选式）----
+        root.addView(sectionTitle(act, ui, "清理"));
+        TextView hint = ui.text("打勾选择要清的项，取消勾选的会保留。"
+                + "清理过程中界面会卡一下，属正常。",
                 12, M3.ON_SURFACE_VARIANT, false);
         hint.setLineSpacing(ui.dp(2), 1f);
         hint.setLayoutParams(ui.matchWrap(4));
         root.addView(hint);
 
-        TextView clean = ui.pill("全部清理", M3.PRIMARY_CONTAINER, M3.ON_PRIMARY_CONTAINER);
+        final TextView clean = ui.pill("清理勾选项", M3.PRIMARY_CONTAINER, M3.ON_PRIMARY_CONTAINER);
         clean.setPadding(ui.dp(18), ui.dp(9), ui.dp(18), ui.dp(9));
         clean.setLayoutParams(ui.matchWrap(10));
         root.addView(clean);
@@ -282,6 +462,7 @@ final class CacheCleaner {
         dlg.show();
 
         // ---- 行为 ----
+        final List<Target> liveTargets = new ArrayList<>();
         final Runnable[] loadRef = new Runnable[1];
         loadRef[0] = () -> {
             statusBox.removeAllViews();
@@ -298,6 +479,10 @@ final class CacheCleaner {
                     junk += t.size;
                 }
                 Collections.sort(ts, (a, b) -> Long.compare(b.size, a.size));
+                synchronized (liveTargets) {
+                    liveTargets.clear();
+                    liveTargets.addAll(ts);
+                }
 
                 final long fTotal = total;
                 final long fJunk = junk;
@@ -312,10 +497,12 @@ final class CacheCleaner {
                     if (fTs.isEmpty()) {
                         listBox.addView(ui.text("没有可清理的东西。", 11.5f,
                                 M3.ON_SURFACE_VARIANT, false));
+                        clean.setEnabled(false);
                         return;
                     }
+                    clean.setEnabled(true);
                     for (Target t : fTs) {
-                        listBox.addView(item(act, ui, t.label, t.note + " · " + human(t.size)));
+                        listBox.addView(checkableItem(act, ui, t));
                     }
                 });
             }, "magpie-cache-scan").start();
@@ -324,32 +511,52 @@ final class CacheCleaner {
         refresh.setOnClickListener(v -> loadRef[0].run());
         loadRef[0].run();
 
-        clean.setOnClickListener(v -> confirmClean(act, ui, dlg, loadRef[0]));
+        clean.setOnClickListener(v -> {
+            List<Target> picked = new ArrayList<>();
+            synchronized (liveTargets) {
+                for (Target t : liveTargets) {
+                    if (t.selected && t.size >= 0) {
+                        picked.add(t);
+                    }
+                }
+            }
+            if (picked.isEmpty()) {
+                android.widget.Toast.makeText(act, "先勾选要清理的项",
+                        android.widget.Toast.LENGTH_SHORT).show();
+                return;
+            }
+            confirmClean(act, ui, dlg, loadRef[0], picked);
+        });
     }
 
     private static void confirmClean(final Activity act, final Ui ui,
-                                     final AlertDialog parent, final Runnable after) {
+                                     final AlertDialog parent, final Runnable after,
+                                     final List<Target> picked) {
+        long willFree = 0;
+        int n = 0;
+        for (Target t : picked) {
+            willFree += t.size;
+            n++;
+        }
         AlertDialog c = new AlertDialog.Builder(act)
                 .setTitle("清理缓存")
-                .setMessage("删掉所有可清理项？\n\n"
-                        + "这些都是可再生数据：模型索引、插件索引、旧版 Bun、更新包残留。\n"
-                        + "配置、日志、使用记录不受影响。")
+                .setMessage("清掉勾选的 " + n + " 项（约 " + human(willFree) + "）？\n\n"
+                        + "这些都是可再生数据。配置、日志、使用记录不受影响。")
                 .setNegativeButton("取消", null)
                 .setPositiveButton("清理", (d, w) -> {
                     new Thread(() -> {
-                        List<Target> ts = targets(act);
                         long freed = 0;
-                        int n = 0;
-                        for (Target t : ts) {
-                            long s = sizeOf(t.path);
+                        int m = 0;
+                        for (Target t : picked) {
+                            long sz = sizeOf(t.path);
                             delete(t.path);
                             if (!t.path.exists()) {
-                                freed += s;
-                                n++;
+                                freed += sz;
+                                m++;
                             }
                         }
                         final long fFreed = freed;
-                        final int fN = n;
+                        final int fN = m;
                         act.runOnUiThread(() -> {
                             android.widget.Toast.makeText(act,
                                     "已清理 " + fN + " 项，释放 " + human(fFreed),
@@ -363,6 +570,29 @@ final class CacheCleaner {
                 .create();
         styleDialog(act, ui, c);
         c.show();
+    }
+
+    /** 一个可清理项（带勾选框）：勾选状态写回 target.selected。 */
+    private static LinearLayout checkableItem(Activity act, Ui ui, Target t) {
+        LinearLayout box = item(act, ui, t.label, t.note + " · " + human(t.size));
+        android.widget.CheckBox cb = new android.widget.CheckBox(act);
+        cb.setChecked(t.selected);
+        cb.setOnCheckedChangeListener((b, checked) -> t.selected = checked);
+        // 整卡可点切换勾选
+        box.setOnClickListener(v -> cb.toggle());
+        LinearLayout wrap = new LinearLayout(act);
+        wrap.setOrientation(LinearLayout.HORIZONTAL);
+        wrap.setGravity(Gravity.CENTER_VERTICAL);
+        wrap.setLayoutParams(ui.matchWrap(6));
+        cb.setLayoutParams(new LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT));
+        wrap.addView(cb);
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        box.setLayoutParams(clp);
+        wrap.addView(box);
+        return wrap;
     }
 
     // ==================================================================

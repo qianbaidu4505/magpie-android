@@ -39,6 +39,14 @@ final class WhatsNew {
     private static final android.util.SparseArray<String[]> NOTES = new android.util.SparseArray<>();
 
     static {
+        // 196 / 1.8.16
+        NOTES.put(196, new String[]{
+                "新功能",
+                "• 缓存清理改勾选式：想清哪些打勾，不清的保留",
+                "• 缓存清理支持定时自动清理：默认关，间隔自定义（1-90 天），只清可再生项不碰生成的图",
+                "• 缓存扫描范围扩大：AI 生成的图片/视频、识图缓存、插件工作目录、图标缓存都纳入",
+                "• 文件管理器「关闭」改两态：根目录显示关闭，子目录显示「返回上级」且真正逐级返回（之前层级会叠着）",
+        });
         // 195 / 1.8.15
         NOTES.put(195, new String[]{
                 "修复",

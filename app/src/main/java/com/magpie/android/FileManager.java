@@ -69,9 +69,20 @@ final class FileManager {
         }
     }
 
+    /** 当前打开着的目录弹窗（浏览层级切换时 dismiss 上一层，防止层层叠着）。 */
+    private static AlertDialog current;
+
     private static void show(final Activity act, final Ui ui, final File dir) {
         AlertDialog dlg = build(act, ui, dir, false);
         if (dlg != null) {
+            AlertDialog old = current;
+            current = dlg;
+            // 旧的等新的起来再收，避免闪一下空白
+            dlg.setOnShowListener(d -> {
+                if (old != null && old.isShowing()) {
+                    old.dismiss();
+                }
+            });
             dlg.show();
         }
     }
@@ -190,11 +201,33 @@ final class FileManager {
             }
         }
 
-        AlertDialog dlg = new AlertDialog.Builder(act)
+        final AlertDialog dlg = new AlertDialog.Builder(act)
                 .setTitle("文件管理器")
                 .setView(scroll)
-                .setPositiveButton("关闭", null)
                 .create();
+        // 「关闭」两态：根目录=真关闭；子目录=返回上一级。
+        // 文案跟着变，用户不用猜。
+        boolean atRoot = cur.getAbsolutePath().equals(rootPath);
+        dlg.setOnShowListener(d -> {
+            android.widget.Button b = dlg.getButton(AlertDialog.BUTTON_POSITIVE);
+            b.setText(atRoot ? "关闭" : "返回上级");
+            b.setOnClickListener(v -> {
+                if (atRoot) {
+                    dlg.dismiss();
+                    if (current == dlg) {
+                        current = null;
+                    }
+                } else {
+                    File up = cur.getParentFile();
+                    if (up != null) {
+                        dlg.dismiss();
+                        show(act, ui, up);
+                    } else {
+                        dlg.dismiss();
+                    }
+                }
+            });
+        });
         styleDialog(act, ui, dlg);
         return dlg;
     }

@@ -378,6 +378,15 @@ public class GatewayService extends Service {
         // 诊断端口跟着内核走：内核在，端口就在（AI 排查用，见 DiagServer 注释）
         DiagServer.ensure(ctx);
 
+        // 定时缓存清理：到点了静默清一轮（不弹 UI，日志里记一条）
+        new Thread(() -> {
+            try {
+                CacheCleaner.autoCleanIfDue(ctx);
+            } catch (Exception e) {
+                Log.w(TAG, "auto clean: " + e.getMessage());
+            }
+        }, "magpie-autoclean").start();
+
         acquireWakeLock(ctx);
 
         final Process child = p;
