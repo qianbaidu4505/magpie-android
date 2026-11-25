@@ -39,6 +39,12 @@ final class WhatsNew {
     private static final android.util.SparseArray<String[]> NOTES = new android.util.SparseArray<>();
 
     static {
+        // 197 / 1.8.17
+        NOTES.put(197, new String[]{
+                "修复",
+                "• 文件管理器的「关闭/返回上级」按钮消失了——上一版去掉占位按钮导致按钮区空白，已修",
+                "• 更新弹窗改为跨版本聚合：如果你从更早的版本直接升上来（中间几版没装过），会把中间所有版本的更新说明一起列出",
+        });
         // 196 / 1.8.16
         NOTES.put(196, new String[]{
                 "新功能",
@@ -132,16 +138,39 @@ final class WhatsNew {
         if (shown >= code) {
             return false;
         }
-        String[] notes = NOTES.get(code);
-        if (notes == null || notes.length == 0) {
-            // 这版没写说明（比如用户从很老的版本跳过来）也不弹
-            sp.edit().putInt(KEY_SHOWN, code).apply();
-            return false;
-        }
         // 首装用户（从未记过）不弹——他们没有「升级」的概念
         if (shown == 0) {
             sp.edit().putInt(KEY_SHOWN, code).apply();
             return false;
+        }
+        // 跨版本聚合：把「上一个已发布正式版 + 1」到当前 code 的所有说明合并。
+        // 比如 GitHub 正式版只到 1.1（code 110），用户手机从 110 直接升到 160，
+        // 就把 111~160 的说明全部列出——不然中间几版的更新用户永远看不到。
+        StringBuilder merged = new StringBuilder();
+        boolean any = false;
+        for (int c = shown + 1; c <= code; c++) {
+            String[] part = NOTES.get(c);
+            if (part == null) {
+                continue;
+            }
+            if (any) {
+                merged.append("\n");
+            }
+            for (String line : part) {
+                merged.append(line).append('\n');
+            }
+            any = true;
+        }
+        if (!any) {
+            // 中间没有任何说明（跳版太远）也不弹
+            sp.edit().putInt(KEY_SHOWN, code).apply();
+            return false;
+        }
+        String[] notes = merged.toString().split("\n");
+        {
+            String[] trimmed = new String[notes.length - (notes.length > 0 && notes[notes.length-1].isEmpty() ? 1 : 0)];
+            System.arraycopy(notes, 0, trimmed, 0, trimmed.length);
+            notes = trimmed;
         }
 
         LinearLayout box = new LinearLayout(host);

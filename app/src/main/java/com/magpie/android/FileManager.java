@@ -201,15 +201,21 @@ final class FileManager {
             }
         }
 
+        // 占位 positive button：AlertDialog 只有调过 setXxxButton 才会创建那个按钮，
+        // 不占位的话 getButton 返回 null、按钮区直接消失（1.8.16 的 bug）
         final AlertDialog dlg = new AlertDialog.Builder(act)
                 .setTitle("文件管理器")
                 .setView(scroll)
+                .setPositiveButton("", null)
                 .create();
         // 「关闭」两态：根目录=真关闭；子目录=返回上一级。
         // 文案跟着变，用户不用猜。
         boolean atRoot = cur.getAbsolutePath().equals(rootPath);
         dlg.setOnShowListener(d -> {
             android.widget.Button b = dlg.getButton(AlertDialog.BUTTON_POSITIVE);
+            if (b == null) {
+                return;
+            }
             b.setText(atRoot ? "关闭" : "返回上级");
             b.setOnClickListener(v -> {
                 if (atRoot) {
