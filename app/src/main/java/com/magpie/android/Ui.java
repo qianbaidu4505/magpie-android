@@ -31,14 +31,20 @@ final class Ui {
     final Context ctx;
     final int[] c;
     final float density;
-    /** 是不是「青绿·设计稿」主题：卡片换发光描边、大圆角、独立 2×2 网格。 */
+    /**
+     * 当前主题的风格参数：圆角、描边、阴影、字号、网格线全从这里取。
+     * 页面上任何几何常数都必须读它，别再写死数字，否则切主题会半新半旧。
+     */
+    final M3.Style style;
+    /** 是不是「带主色描边」的主题：卡片换发光描边、大圆角、独立 2×2 网格。 */
     final boolean design;
 
     Ui(Context ctx) {
         this.ctx = ctx;
         this.c = M3.current(ctx);
         this.density = ctx.getResources().getDisplayMetrics().density;
-        this.design = M3.design(ctx);
+        this.style = M3.style(ctx);
+        this.design = this.style.accentBorder;
     }
 
     // ------------------------------------------------------------------
@@ -99,9 +105,10 @@ final class Ui {
     GradientDrawable glowStroke(int color, float radiusDp, int fallbackStroke, float fallbackDp) {
         if (design) {
             int stroke = (c[M3.PRIMARY] & 0x00FFFFFF) | 0x52000000;
-            return roundStroke(color, radiusDp, stroke, 1.5f);
+            return roundStroke(color, radiusDp, stroke, style.borderWidth);
         }
-        return roundStroke(color, radiusDp, fallbackStroke, fallbackDp);
+        return roundStroke(color, radiusDp, fallbackStroke, style.borderWidth > 0
+                ? style.borderWidth : fallbackDp);
     }
 
     /**
@@ -110,7 +117,7 @@ final class Ui {
      * 页面卡片长得像一家人。
      */
     GradientDrawable dialogBg() {
-        return glowStroke(c[M3.SURFACE_CONTAINER_LOW], 24f,
+        return glowStroke(c[M3.SURFACE_CONTAINER_LOW], style.cardRadius,
                 c[M3.OUTLINE_VARIANT], 1f);
     }
 
@@ -123,25 +130,29 @@ final class Ui {
     /** 给一个可点卡片挂上发光底 + 悬浮阴影。 */
     void glowCard(View v, GradientDrawable bg) {
         v.setBackground(bg);
-        if (design) {
-            v.setElevation(dp(6));
+        if (style.elevationDp > 0) {
+            v.setElevation(dp(style.elevationDp * 0.75f));
             if (android.os.Build.VERSION.SDK_INT >= 28) {
                 v.setOutlineAmbientShadowColor(0x22000000);
                 v.setOutlineSpotShadowColor(0x33000000);
             }
+        } else {
+            v.setElevation(0);
         }
     }
 
     /** 卡片底：surface container low + 1dp outline variant 描边。 */
     GradientDrawable cardBg() {
         if (design) {
-            // 设计稿：卡片用玻璃底 + 青色发光描边，描边加粗，圆角更大更软。
+            // 经典：卡片用玻璃底 + 青色发光描边，描边加粗，圆角更大更软。
             // 描边用主色的低透明版本，视觉上像发光的边缘。
             int stroke = (c[M3.PRIMARY] & 0x00FFFFFF) | 0x52000000;
-            GradientDrawable d = roundStroke(c[M3.SURFACE_CONTAINER_LOW], 24f, stroke, 1.5f);
-            return d;
+            return roundStroke(c[M3.SURFACE_CONTAINER_LOW], style.cardRadius,
+                    stroke, style.borderWidth);
         }
-        return roundStroke(c[M3.SURFACE_CONTAINER_LOW], 20f, c[M3.OUTLINE_VARIANT], 1f);
+        // 紧凑：中性发丝线，靠三档底色（页面/卡片/卡内块）分层，不靠阴影。
+        return roundStroke(c[M3.SURFACE_CONTAINER_LOW], style.cardRadius,
+                c[M3.OUTLINE_VARIANT], style.borderWidth);
     }
 
     /** 点得动的卡片：叠一层涟漪。 */
@@ -162,13 +173,15 @@ final class Ui {
         box.setBackground(cardBg());
         int p = dp(16);
         box.setPadding(p, p, p, p);
-        if (design) {
-            // 悬浮感：设计稿卡片要有柔和阴影，从背景里浮起来
-            box.setElevation(dp(8));
+        if (style.elevationDp > 0) {
+            // 悬浮感：经典主题的卡片要有柔和阴影，从背景里浮起来
+            box.setElevation(dp(style.elevationDp));
             if (android.os.Build.VERSION.SDK_INT >= 28) {
                 box.setOutlineAmbientShadowColor(0x22000000);
                 box.setOutlineSpotShadowColor(0x33000000);
             }
+        } else {
+            box.setElevation(0);
         }
         return box;
     }
@@ -353,6 +366,22 @@ final class Ui {
             t.setTypeface(t.getTypeface(), android.graphics.Typeface.BOLD);
         }
         t.setIncludeFontPadding(false);
+        return t;
+    }
+
+    /**
+     * 一个「大数字」TextView：字号和等宽都跟随主题。
+     *
+     * <p>tnum（tabular numbers）让每个数字占同样宽度，数字跳动时不会左右抖。
+     * 只有紧凑主题开，经典主题保持原来的无衬线观感。
+     */
+    TextView bigNum(String s) {
+        TextView t = text(s, style.bigNum, M3.ON_SURFACE, true);
+        t.setSingleLine(true);
+        t.setMaxLines(1);
+        if (style.monoNum) {
+            t.setFontFeatureSettings("tnum");
+        }
         return t;
     }
 

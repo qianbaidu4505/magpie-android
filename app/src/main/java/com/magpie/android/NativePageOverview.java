@@ -366,7 +366,7 @@ final class NativePageOverview extends NativePage {
         String speedText = speedVal > 0
                 ? (speedVal >= 100 ? String.valueOf(Math.round(speedVal))
                 : String.format(java.util.Locale.US, "%.0f", speedVal)) : "—";
-        line.addView(ui.text(speedText, 30, M3.ON_SURFACE, true));
+        line.addView(ui.bigNum(speedText));
         TextView unit = ui.text(" token/秒", 13, M3.ON_SURFACE_VARIANT, false);
         LinearLayout.LayoutParams ulp = ui.wrap();
         ulp.bottomMargin = ui.dp(5);
@@ -502,9 +502,8 @@ final class NativePageOverview extends NativePage {
 
         // 数字行：左边大数字，右边可选的流量角标（竖排两行：↑一行 ↓一行）
         LinearLayout numRow = ui.row();
-        TextView v = ui.text(big, 30, M3.ON_SURFACE, true);
-        v.setSingleLine(true);
-        v.setMaxLines(1);
+        // 字号和等宽跟随主题（经典 30sp 无衬线 / 紧凑 28sp tnum）
+        TextView v = ui.bigNum(big);
         numRow.addView(v, ui.weight(1));
         if (corner != null && !corner.isEmpty()) {
             TextView cv = ui.text(corner, 11.5f, M3.ON_SURFACE_VARIANT, false);

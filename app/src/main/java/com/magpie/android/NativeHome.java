@@ -769,7 +769,7 @@ public class NativeHome extends Activity {
                 {"重启网关", "悬浮球保活", "查看日志", "复制网关地址", "忽略电池优化"},
                 {"导入本地插件", "粘贴 Marvis 登录回调", "文件管理器", "省电策略实验室", "缓存清理"},
                 {"检查 magpie 更新", "检查 App 更新", "更新设置"},
-                {"复制网页登录链接", "用浏览器打开", "设置", "关于"},
+                {"复制网页登录链接", "用浏览器打开", "界面主题", "设置", "关于"},
         };
         final String[][] subs = {
                 {"微信赞赏码 + 支付宝收款码；纯属自愿，不构成任何服务承诺",
@@ -789,6 +789,7 @@ public class NativeHome extends Activity {
                         "内核与壳软件各自的稳定/测试渠道和更新源"},
                 {"带 k= 的完整网页地址，粘到浏览器里直接登进去（绕过登录页）",
                         "交给系统浏览器，方便用电脑上的工具看",
+                        "经典 / 紧凑两套观感，选完立刻生效",
                         "端口、局域网访问、外观与开机启动",
                         "官方仓库、移植作者与许可证"},
         };
@@ -807,7 +808,8 @@ public class NativeHome extends Activity {
                         R.drawable.ic_settings_2},
                 // 其他：网页登录链接 / 浏览器 / 设置 / 关于
                 {R.drawable.ic_link, R.drawable.ic_external_link,
-                        R.drawable.ic_settings, R.drawable.ic_info},
+                        R.drawable.ic_layout_dashboard, R.drawable.ic_settings,
+                        R.drawable.ic_info},
         };
 
         final Dialog dialog = new Dialog(this, R.style.Theme_Magpie_Sheet);
@@ -886,8 +888,10 @@ public class NativeHome extends Activity {
         GradientDrawable cardBg = ui.glowStroke(ui.col(M3.SURFACE_CONTAINER), 16,
                 ui.col(M3.OUTLINE_VARIANT), 1);
         ui.clickable(row, cardBg);
-        if (ui.design) {
-            row.setElevation(ui.dp(6));
+        if (ui.style.elevationDp > 0) {
+            row.setElevation(ui.dp(ui.style.elevationDp));
+        } else {
+            row.setElevation(0);
         }
         row.setPadding(ui.dp(12), ui.dp(11), ui.dp(12), ui.dp(11));
         LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(
@@ -988,6 +992,9 @@ public class NativeHome extends Activity {
                         openInBrowser();
                         break;
                     case 2:
+                        ThemeSheet.show(this, ui);
+                        break;
+                    case 3:
                         openSettings();
                         break;
                     default:

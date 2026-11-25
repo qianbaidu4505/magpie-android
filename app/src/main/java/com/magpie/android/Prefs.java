@@ -58,6 +58,8 @@ public final class Prefs {
     public static final String UNIT_MODE = "unit_mode";
     /** 主题模式：0=跟随系统，1=深色，2=浅色。 */
     public static final String THEME_MODE = "theme_mode";
+    /** 界面风格下标：0=经典，1=紧凑（对应 M3.THEMES）。 */
+    public static final String THEME_STYLE = "theme_style";
 
     public static int themeMode(Context ctx) {
         int m = sp(ctx).getInt(THEME_MODE, 0);
@@ -66,6 +68,17 @@ public final class Prefs {
 
     public static void setThemeMode(Context ctx, int m) {
         sp(ctx).edit().putInt(THEME_MODE, m < 0 || m > 2 ? 0 : m).apply();
+    }
+
+    /** 界面风格：只做下标校验，具体有几套由 {@link M3#THEMES} 决定。 */
+    public static int themeStyle(Context ctx) {
+        int i = sp(ctx).getInt(THEME_STYLE, 0);
+        return i < 0 || i >= M3.THEMES.length ? 0 : i;
+    }
+
+    public static void setThemeStyle(Context ctx, int i) {
+        int v = i < 0 || i >= M3.THEMES.length ? 0 : i;
+        sp(ctx).edit().putInt(THEME_STYLE, v).apply();
     }
 
     /** 上次发「设为无限制」提醒的时间（毫秒），控制提醒频率。 */

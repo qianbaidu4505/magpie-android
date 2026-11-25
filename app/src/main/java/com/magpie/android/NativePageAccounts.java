@@ -765,8 +765,10 @@ final class NativePageAccounts extends NativePage {
         GradientDrawable hbg = ui.glowStroke(ui.col(M3.SURFACE_CONTAINER_LOW), 18,
                 ui.col(M3.OUTLINE_VARIANT), 1);
         ui.clickable(header, hbg);
-        if (ui.design) {
-            header.setElevation(ui.dp(6));
+        if (ui.style.elevationDp > 0) {
+            header.setElevation(ui.dp(ui.style.elevationDp));
+        } else {
+            header.setElevation(0);
         }
         header.setPadding(ui.dp(14), ui.dp(13), ui.dp(12), ui.dp(13));
         LinearLayout.LayoutParams hlp = new LinearLayout.LayoutParams(

@@ -54,25 +54,134 @@ final class M3 {
     static final String[] ROLE_NAMES = {"primary", "onPrimary", "primaryContainer", "onPrimaryContainer", "secondary", "onSecondary", "secondaryContainer", "onSecondaryContainer", "tertiary", "onTertiary", "tertiaryContainer", "onTertiaryContainer", "error", "onError", "errorContainer", "onErrorContainer", "surface", "onSurface", "surfaceVariant", "onSurfaceVariant", "outline", "outlineVariant", "surfaceDim", "surfaceBright", "surfaceContainerLowest", "surfaceContainerLow", "surfaceContainer", "surfaceContainerHigh", "surfaceContainerHighest", "inverseSurface", "inverseOnSurface", "inversePrimary", "scrim", "quotaWarn"};
 
     /** 种子色：设为「跟随系统」以外的风格。最后一个是设计稿配色。 */
-    static final String[] SEED_NAMES = {"青绿·设计稿"};
-    static final int[] SEEDS = {0xFF3498DB};
+    static final String[] SEED_NAMES = {"经典", "紧凑"};
+    static final int[] SEEDS = {0xFF3498DB, 0xFF5DADE2};
 
     static final int[][] LIGHT = {
         // 青绿·设计稿（浅色·柔化）
         {0xFF3498DB, 0xFFFFFFFF, 0xFFD6EAF8, 0xFF1B4F72, 0xFF5D6D7E, 0xFFFFFFFF, 0xFFD5DBDB, 0xFF2E3B47, 0xFF27AE60, 0xFFFFFFFF, 0xFFD5F5E3, 0xFF1E8449, 0xFFE74C3C, 0xFFFFFFFF, 0xFFFDEDEC, 0xFF943126, 0xFFF4F5F7, 0xFF222222, 0xFFDDE1E7, 0xFF444444, 0xFFAEB6BF, 0xFFDDE1E7, 0xFFE1E4E8, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFF7F8FA, 0xFFEEF0F3, 0xFFE7EAEE, 0xFF222222, 0xFFF4F5F7, 0xFF85C1E9, 0xFF000000, 0xFFF39C12},
+        // 紧凑（浅色）: 描边更淡、底色更冷
+        {0xFF3498DB, 0xFFFFFFFF, 0xFFD6EAF8, 0xFF1B4F72, 0xFF5D6D7E, 0xFFFFFFFF,
+                0xFFE4E8ED, 0xFF2E3B47, 0xFF27AE60, 0xFFFFFFFF, 0xFFD5F5E3, 0xFF1E8449,
+                0xFFE74C3C, 0xFFFFFFFF, 0xFFFDEDEC, 0xFF943126, 0xFFF7F8FA, 0xFF1C1E21,
+                0xFFE4E8ED, 0xFF4A4F57, 0xFFB3BAC2, 0xFFDCE0E5, 0xFFEDEFF2, 0xFFFFFFFF,
+                0xFFFFFFFF, 0xFFFFFFFF, 0xFFF9FAFB, 0xFFF1F3F5, 0xFFEAEDF0, 0xFF1C1E21,
+                0xFFF7F8FA, 0xFF85C1E9, 0xFF000000, 0xFFF39C12},
     };
 
     static final int[][] DARK = {
         // 青绿·设计稿（深色）
         {0xFF5DADE2, 0xFF0B141B, 0xFF1B3A52, 0xFFD6EAF8, 0xFF85929E, 0xFF0B141B, 0xFF2C343C, 0xFFD5DBDB, 0xFF2ECC71, 0xFF0B141B, 0xFF1D4D34, 0xFFD5F5E3, 0xFFE74C3C, 0xFF0B141B, 0xFF4A2327, 0xFFFDEDEC, 0xFF17191C, 0xFFEAECEE, 0xFF2A2E33, 0xFFA6AFB8, 0xFF5D6670, 0xFF3A3F45, 0xFF101214, 0xFF22262B, 0xFF101214, 0xFF1B1E22, 0xFF202329, 0xFF262A30, 0xFF2C3138, 0xFFEAECEE, 0xFF17191C, 0xFF5DADE2, 0xFF000000, 0xFFF5B041},
+        // 紧凑（深色）: 页面 #0D1014 / 卡片 #1A1F26 / 卡内块 #20262E，三档拉开
+        {0xFF5DADE2, 0xFF0A1420, 0xFF1B3A52, 0xFFD6EAF8, 0xFF85929E, 0xFF0A1420,
+                0xFF262D36, 0xFFD5DBDB, 0xFF3FB950, 0xFF07130A, 0xFF1D4D34, 0xFFD5F5E3,
+                0xFFF85149, 0xFF1A0708, 0xFF4A2327, 0xFFFDEDEC, 0xFF0D1014, 0xFFE8EAED,
+                0xFF262D36, 0xFF9AA4AF, 0xFF525B66, 0xFF2A3037, 0xFF08090C, 0xFF1E242B,
+                0xFF0A0C10, 0xFF1A1F26, 0xFF20262E, 0xFF262D36, 0xFF2C343D, 0xFFE8EAED,
+                0xFF0D1014, 0xFF5DADE2, 0xFF000000, 0xFFD29922},
     };
+
+
+    /**
+     * 一套界面风格：令牌表之外的手感参数。
+     *
+     * <p>为什么和颜色分开：颜色是「查表」，风格是「几何」。用户想要的不只是
+     * 换个色，还要圆角、阴影、字号、有没有分割线一起跟着变，所以两样装在
+     * 一个 Theme 里，切的时候一次全换。
+     */
+    static final class Style {
+        /** 卡片圆角（dp）。 */
+        final float cardRadius;
+        /** 卡内小块的圆角（dp）。 */
+        final float innerRadius;
+        /** 描边宽度（dp）。 */
+        final float borderWidth;
+        /** true=主色低透明描边（发光感），false=中性发丝线。 */
+        final boolean accentBorder;
+        /** 卡片悬浮高度（dp），0 = 不悬浮。 */
+        final int elevationDp;
+        /** 大数字字号（sp）。 */
+        final float bigNum;
+        /** true=数字用等宽字体（tnum），跳数字时不抖。 */
+        final boolean monoNum;
+        /** true=四宫格并成一整张卡，false=四张独立卡。 */
+        final boolean mergedGrid;
+
+        Style(float cardRadius, float innerRadius, float borderWidth, boolean accentBorder,
+              int elevationDp, float bigNum, boolean monoNum, boolean mergedGrid) {
+            this.cardRadius = cardRadius;
+            this.innerRadius = innerRadius;
+            this.borderWidth = borderWidth;
+            this.accentBorder = accentBorder;
+            this.elevationDp = elevationDp;
+            this.bigNum = bigNum;
+            this.monoNum = monoNum;
+            this.mergedGrid = mergedGrid;
+        }
+    }
+
+    /** 一套完整主题：深浅两套令牌 + 一份风格参数。 */
+    static final class Theme {
+        final String key;
+        final String name;
+        final String desc;
+        final int[] light;
+        final int[] dark;
+        final Style style;
+
+        Theme(String key, String name, String desc, int[] light, int[] dark, Style style) {
+            this.key = key;
+            this.name = name;
+            this.desc = desc;
+            this.light = light;
+            this.dark = dark;
+            this.style = style;
+        }
+    }
+
+    /** 经典：四张独立发光卡、大圆角、有阴影 —— 换之前的原样。 */
+    static final Style STYLE_CLASSIC = new Style(24f, 18f, 1.5f, true, 8, 30f, false, false);
+    /** 紧凑：一整张卡 + 发丝线、无阴影、等宽数字。 */
+    static final Style STYLE_COMPACT = new Style(20f, 14f, 1f, false, 0, 28f, true, true);
+
+    /** 可选主题。下标存在 Prefs.THEME_STYLE 里，切换后整页重建。 */
+    static final Theme[] THEMES = {
+            new Theme("classic", "经典", "四张独立卡 · 发光描边 · 大圆角 · 柔和阴影",
+                    LIGHT[0], DARK[0], STYLE_CLASSIC),
+            new Theme("compact", "紧凑", "一整张卡 · 发丝分割线 · 等宽数字 · 无阴影",
+                    LIGHT[1], DARK[1], STYLE_COMPACT),
+    };
+
+    /** 当前主题下标，越界退回第 0 套。 */
+    static int themeIndex(Context ctx) {
+        int i = Prefs.themeStyle(ctx);
+        return i < 0 || i >= THEMES.length ? 0 : i;
+    }
+
+    static void setThemeIndex(Context ctx, int i) {
+        Prefs.setThemeStyle(ctx, i < 0 || i >= THEMES.length ? 0 : i);
+    }
+
+    static Theme theme(Context ctx) {
+        return THEMES[themeIndex(ctx)];
+    }
+
+    static Style style(Context ctx) {
+        return theme(ctx).style;
+    }
 
     private M3() {
     }
 
-    /** 是不是设计稿主题：现在只留这一套，永远返回 true。 */
+    /**
+     * 当前主题是不是「带主色描边」那一类。
+     *
+     * <p>以前这是个写死 {@code true} 的开关，页面里 31 处 {@code ui.design}
+     * 靠它分叉（四张独立卡 vs 一整张卡）。现在它跟随主题走：经典=true，
+     * 紧凑=false —— 所以那 31 处一行都不用改，切主题就自动换布局。
+     */
     static boolean design(Context ctx) {
-        return true;
+        return style(ctx).accentBorder;
     }
 
     /**
@@ -91,9 +200,10 @@ final class M3 {
                 & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
     }
 
-    /** 当前生效的令牌表：只剩设计稿一套，按深/浅色取。 */
+    /** 当前生效的令牌表：按主题取那一套，再按深/浅色分。 */
     static int[] current(Context ctx) {
-        return of(ctx, 0);
+        Theme t = theme(ctx);
+        return dark(ctx) ? t.dark : t.light;
     }
 
     /** 种子色圆点的显示色：深色模式略微提亮，否则原色。 */
@@ -116,10 +226,10 @@ final class M3 {
         return lum > 0.55 ? 0xFF1B1B1B : 0xFFFFFFFF;
     }
 
-    /** 8 套固定色板里选中的那一套；浅色/深色各一份。 */
+    /** 按主题下标取令牌表；浅色/深色各一份，越界退回第 0 套。 */
     static int[] of(Context ctx, int index) {
-        int i = Math.max(0, Math.min(SEEDS.length - 1, index));
-        return dark(ctx) ? DARK[i] : LIGHT[i];
+        int i = Math.max(0, Math.min(THEMES.length - 1, index));
+        return dark(ctx) ? THEMES[i].dark : THEMES[i].light;
     }
 
     /**
