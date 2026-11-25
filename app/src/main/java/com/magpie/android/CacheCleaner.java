@@ -347,17 +347,13 @@ final class CacheCleaner {
         // ---- 标题 ----
         root.addView(ui.text("缓存清理", 17, M3.ON_SURFACE, true));
 
-        TextView intro = ui.text(
+        root.addView(ui.banner(R.drawable.ic_trash_2,
                 "magpie 的缓存从不自动清理，实测能长到 350 MB 以上。"
-                        + "下面这些都可以安全删掉——都是能重新下载或重建的东西。\n"
-                        + "不会动你的配置、日志、使用记录。",
-                12, M3.ON_SURFACE_VARIANT, false);
-        intro.setLineSpacing(ui.dp(2), 1f);
-        intro.setLayoutParams(ui.matchWrap(4));
-        root.addView(intro);
+                        + "下面这些都可以安全删掉——都是能重新下载或重建的东西，"
+                        + "不会动你的配置、日志、使用记录。"));
 
         // ---- 一、当前占用 ----
-        root.addView(sectionTitle(act, ui, "当前占用"));
+        root.addView(ui.groupTitle(R.drawable.ic_chart_column, "当前占用"));
         final LinearLayout statusBox = ui.column();
         statusBox.setLayoutParams(ui.matchWrap(4));
         root.addView(statusBox);
@@ -368,13 +364,13 @@ final class CacheCleaner {
         root.addView(refresh);
 
         // ---- 二、可清理项 ----
-        root.addView(sectionTitle(act, ui, "可清理项"));
+        root.addView(ui.groupTitle(R.drawable.ic_trash_2, "可清理项"));
         final LinearLayout listBox = ui.column();
         listBox.setLayoutParams(ui.matchWrap(4));
         root.addView(listBox);
 
         // ---- 定时清理 ----
-        root.addView(sectionTitle(act, ui, "定时清理"));
+        root.addView(ui.groupTitle(R.drawable.ic_clock, "定时清理"));
         final android.widget.TextView autoHint = ui.text("", 11.5f,
                 M3.ON_SURFACE_VARIANT, false);
         autoHint.setLineSpacing(ui.dp(2), 1f);
@@ -441,7 +437,7 @@ final class CacheCleaner {
         });
 
         // ---- 三、清理（勾选式）----
-        root.addView(sectionTitle(act, ui, "清理"));
+        root.addView(ui.groupTitle(R.drawable.ic_check, "清理"));
         TextView hint = ui.text("打勾选择要清的项，取消勾选的会保留。"
                 + "清理过程中界面会卡一下，属正常。",
                 12, M3.ON_SURFACE_VARIANT, false);

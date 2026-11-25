@@ -293,18 +293,20 @@ final class PluginTools {
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(ui.dp(20), ui.dp(4), ui.dp(20), 0);
 
-        // 补丁状态摆在输入框上面：插件在不在、版本、补丁有没有打上
-        TextView status = new TextView(act);
-        status.setTextSize(11.5f);
-        status.setText(GatewayService.patchStatus(act));
-        status.setTextColor(ui.col(M3.ON_SURFACE_VARIANT));
-        box.addView(status);
+        // 补丁状态：改成横幅（有图标 + 容器色底），比一行灰字清楚
+        boolean patched = GatewayService.patchStatus(act).contains("已生效")
+                || GatewayService.patchStatus(act).contains("已写入");
+        View statusBanner = ui.banner(
+                patched ? R.drawable.ic_check : R.drawable.ic_circle_alert,
+                GatewayService.patchStatus(act));
+        box.addView(statusBanner);
 
         TextView help = new TextView(act);
         help.setText(R.string.marvis_paste_help);
-        help.setTextSize(12.5f);
-        help.setTextColor(ui.col(M3.ON_SURFACE));
-        help.setPadding(0, ui.dp(10), 0, 0);
+        help.setTextSize(12);
+        help.setTextColor(ui.col(M3.ON_SURFACE_VARIANT));
+        help.setLineSpacing(ui.dp(2), 1f);
+        help.setPadding(0, ui.dp(12), 0, 0);
         box.addView(help);
 
         final EditText input = new EditText(act);

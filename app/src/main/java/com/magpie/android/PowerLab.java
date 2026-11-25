@@ -7,6 +7,7 @@ import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.database.Cursor;
+import android.view.View;
 import android.database.sqlite.SQLiteDatabase;
 import android.net.Uri;
 import android.os.Build;
@@ -82,16 +83,13 @@ final class PowerLab {
         // ---- 标题 ----
         root.addView(ui.text("省电策略实验室", 17, M3.ON_SURFACE, true));
 
-        TextView intro = ui.text("小米 / 澎湃OS 会在后台约 35 秒后冻结整个 App，"
-                        + "网关端口还在但不执行代码。设成「无限制」后不再冻结。"
-                        + "这里能看到系统里到底记的是什么。",
-                12, M3.ON_SURFACE_VARIANT, false);
-        intro.setLineSpacing(ui.dp(2), 1f);
-        intro.setLayoutParams(ui.matchWrap(8));
+        View intro = ui.banner(R.drawable.ic_zap,
+                "小米 / 澎湃OS 会在后台约 35 秒后冻结整个 App，网关端口还在但不执行代码。"
+                        + "设成「无限制」后不再冻结。这里能看到系统里到底记的是什么。");
         root.addView(intro);
 
         // ---- 一、只读诊断 ----
-        root.addView(sectionTitle(act, ui, "当前状态"));
+        root.addView(ui.groupTitle(R.drawable.ic_activity, "当前状态"));
 
         final LinearLayout statusBox = ui.column();
         statusBox.setLayoutParams(ui.matchWrap(4));
@@ -104,7 +102,7 @@ final class PowerLab {
         root.addView(refresh);
 
         // ---- 息屏省电（实验室）----
-        root.addView(sectionTitle(act, ui, "息屏省电（实验）"));
+        root.addView(ui.groupTitle(R.drawable.ic_battery, "息屏省电（实验）"));
 
         TextView wsHint = ui.text("网关运行时一直持有 CPU 唤醒锁（否则息屏后 AI 请求会断）。"
                         + "打开这项后：息屏且连续没有 AI 请求超过设定时间，就释放唤醒锁让手机深度休眠；"
@@ -176,7 +174,7 @@ final class PowerLab {
         });
 
         // ---- 二、adb / Shizuku 命令 ----
-        root.addView(sectionTitle(act, ui, "adb / Shizuku 命令"));
+        root.addView(ui.groupTitle(R.drawable.ic_terminal, "adb / Shizuku 命令"));
 
         TextView cmdHint = ui.text("没有 root 时，用 adb 或 Shizuku 执行下面这些。"
                         + "Shizuku 的「终端」里直接粘贴即可。",
@@ -204,7 +202,7 @@ final class PowerLab {
         root.addView(fixNote);
 
         // ---- 三、Shizuku ----
-        root.addView(sectionTitle(act, ui, "Shizuku（免 root 授权）"));
+        root.addView(ui.groupTitle(R.drawable.ic_shield_check, "Shizuku（免 root 授权）"));
 
         TextView szHint = ui.text("装了 Shizuku 并授权后，壳能以 shell 或 root 身份执行命令。"
                         + "如果 Shizuku 是用 root 启动的，就能直接改 MIUI 省电策略。",
@@ -230,7 +228,7 @@ final class PowerLab {
         root.addView(szBtns);
 
         // ---- 四、root 一键修复 ----
-        root.addView(sectionTitle(act, ui, "一键设为「无限制」"));
+        root.addView(ui.groupTitle(R.drawable.ic_zap, "一键设为「无限制」"));
 
         TextView rootHint = ui.text("直接改 MIUI 的省电策略数据库，等于替你在设置里点了「无限制」。"
                         + "改完会尝试重启 PowerKeeper 让它重读。",

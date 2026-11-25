@@ -1529,17 +1529,57 @@ public class NativeHome extends Activity {
     }
 
     private void confirmAndDiagnose() {
+        android.widget.ScrollView sc = new android.widget.ScrollView(this);
+        sc.setVerticalScrollBarEnabled(false);
+        LinearLayout box = ui.column();
+        box.setPadding(ui.dp(18), ui.dp(4), ui.dp(18), ui.dp(6));
+        sc.addView(box);
+
+        box.addView(ui.banner(R.drawable.ic_stethoscope,
+                "将收集一份完整的现场信息，用于定位问题。"));
+
+        // 收集项：图标 + 文字，一行一条
+        String[][] items = {
+                {"ic_file_text", "网关日志、崩溃记录、进程与资源占用"},
+                {"ic_package", "插件清单与每个插件的加载错误"},
+                {"ic_database", "供应商/额度/路由组配置（不含密钥）"},
+                {"ic_activity", "系统口径流量、VPN 状态、外部连接"},
+                {"ic_folder", "数据目录结构与各文件大小"},
+        };
+        LinearLayout list = ui.settingCard();
+        LinearLayout.LayoutParams llp = ui.matchWrap(10);
+        list.setLayoutParams(llp);
+        for (int i = 0; i < items.length; i++) {
+            int res = getResources().getIdentifier(items[i][0], "drawable", getPackageName());
+            LinearLayout row = ui.row();
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(0, ui.dp(7), 0, ui.dp(7));
+            if (res != 0) {
+                row.addView(ui.icon(res, M3.ON_SURFACE_VARIANT, 16));
+            }
+            TextView t = ui.text(items[i][1], 12.5f, M3.ON_SURFACE, false);
+            t.setLineSpacing(ui.dp(1), 1f);
+            LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+            tlp.leftMargin = ui.dp(10);
+            row.addView(t, tlp);
+            list.addView(row);
+            if (i < items.length - 1) {
+                list.addView(ui.thinDivider());
+            }
+        }
+        box.addView(list);
+
+        TextView note = ui.text("诊断可能耗时较久（几十秒）。包里的密钥、Token、"
+                        + "密码、账号都会自动脱敏或打码，但其余信息仍是你的真实环境数据。",
+                11, M3.ON_SURFACE_VARIANT, false);
+        note.setLineSpacing(ui.dp(2), 1f);
+        note.setLayoutParams(ui.matchWrap(4));
+        box.addView(note);
+
         android.app.AlertDialog dlg = new android.app.AlertDialog.Builder(this)
                 .setTitle("错误诊断")
-                .setMessage("将收集一份完整的现场信息，用于定位问题：\n\n"
-                        + "• 网关日志、崩溃记录、进程与资源占用\n"
-                        + "• 插件清单与每个插件的加载错误\n"
-                        + "• 供应商/额度/路由组配置（不含密钥）\n"
-                        + "• 系统口径流量、VPN 状态、外部连接\n"
-                        + "• 数据目录结构与各文件大小\n\n"
-                        + "诊断可能耗时较久（几十秒）。\n"
-                        + "包里的密钥、Token、密码、账号都会自动脱敏或打码，"
-                        + "但其余信息仍是你的真实环境数据。")
+                .setView(sc)
                 .setNegativeButton("取消", null)
                 .setPositiveButton("开始诊断", (d, w) -> runDiagnose())
                 .setCancelable(true)

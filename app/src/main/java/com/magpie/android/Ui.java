@@ -183,6 +183,140 @@ final class Ui {
         return box;
     }
 
+    // ------------------------------------------------------------------
+    // 统一排版组件（所有设置页/实验室页共用，保证视觉一致）
+    // ------------------------------------------------------------------
+
+    /**
+     * 带图标的卡片标题：图标底块 + 标题 + 一行说明。
+     * 所有页面的卡片头都用这个，别各写各的。
+     */
+    View cardTitle(int iconRes, String title, String sub) {
+        LinearLayout row = row();
+        row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        LinearLayout iconBox = new LinearLayout(ctx);
+        iconBox.setGravity(android.view.Gravity.CENTER);
+        iconBox.setBackground(round(c[M3.SECONDARY_CONTAINER], 12));
+        iconBox.addView(icon(iconRes, M3.ON_SECONDARY_CONTAINER, 18));
+        row.addView(iconBox, new LinearLayout.LayoutParams(dp(32), dp(32)));
+
+        LinearLayout texts = new LinearLayout(ctx);
+        texts.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        tlp.leftMargin = dp(10);
+        row.addView(texts, tlp);
+        texts.addView(text(title, 14.5f, M3.ON_SURFACE, true));
+        if (sub != null && !sub.isEmpty()) {
+            TextView s = text(sub, 11, M3.ON_SURFACE_VARIANT, false);
+            s.setLayoutParams(matchWrap(2));
+            texts.addView(s);
+        }
+        return row;
+    }
+
+    /** 页面顶部说明条：primary 容器色底 + 图标 + 说明文字（比灰字醒目又不吵）。 */
+    View banner(int iconRes, String text) {
+        LinearLayout box = new LinearLayout(ctx);
+        box.setOrientation(LinearLayout.VERTICAL);
+        GradientDrawable bg = glowStroke(c[M3.PRIMARY_CONTAINER], 18f,
+                c[M3.OUTLINE_VARIANT], 1f);
+        box.setBackground(bg);
+        box.setPadding(dp(14), dp(12), dp(14), dp(12));
+
+        LinearLayout head = row();
+        head.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        if (iconRes != 0) {
+            head.addView(icon(iconRes, M3.ON_PRIMARY_CONTAINER, 18));
+        }
+        TextView t = text(text, 11.5f, M3.ON_PRIMARY_CONTAINER, false);
+        t.setLineSpacing(dp(2), 1f);
+        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        if (iconRes != 0) {
+            tlp.leftMargin = dp(8);
+        }
+        head.addView(t, tlp);
+        box.addView(head);
+        return box;
+    }
+
+    /**
+     * 设置行：左边「标题 + 说明」，右边挂任意 view（开关/值胶囊/按钮）。
+     * 行与行之间自带一条细分隔线（最后一行由调用方决定要不要）。
+     */
+    View settingRow(String label, String sub, View right) {
+        LinearLayout row = row();
+        row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(10), 0, dp(10));
+
+        LinearLayout texts = new LinearLayout(ctx);
+        texts.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        row.addView(texts, tlp);
+        texts.addView(text(label, 13, c[M3.ON_SURFACE], false));
+        if (sub != null && !sub.isEmpty()) {
+            TextView s = text(sub, 10.5f, M3.ON_SURFACE_VARIANT, false);
+            s.setLineSpacing(dp(1), 1f);
+            s.setLayoutParams(matchWrap(2));
+            texts.addView(s);
+        }
+        if (right != null) {
+            row.addView(right);
+        }
+        return row;
+    }
+
+    /** 一条细分隔线（设置行之间用）。注意：与页面上带上下边距的 divider() 区分。 */
+    View thinDivider() {
+        View v = new View(ctx);
+        v.setBackgroundColor(c[M3.OUTLINE_VARIANT]);
+        v.setAlpha(0.5f);
+        v.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 1));
+        return v;
+    }
+
+    /** 可点的值胶囊：显示当前值，点一下改。 */
+    TextView valuePill(String s) {
+        TextView v = pill(s, M3.SURFACE_CONTAINER_HIGH, M3.ON_SURFACE);
+        v.setPadding(dp(12), dp(5), dp(12), dp(5));
+        v.setBackground(roundStroke(c[M3.SURFACE_CONTAINER_HIGH], 999f,
+                c[M3.OUTLINE_VARIANT], 1f));
+        return v;
+    }
+
+    /** 一个分组的标题（带图标的彩色小标题）。 */
+    View groupTitle(int iconRes, String s) {
+        LinearLayout row = row();
+        row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(dp(4), dp(16), 0, dp(6));
+        row.setLayoutParams(lp);
+        if (iconRes != 0) {
+            row.addView(icon(iconRes, M3.PRIMARY, 15));
+            TextView t = text(s, 12.5f, M3.PRIMARY, true);
+            LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            tlp.leftMargin = dp(6);
+            row.addView(t, tlp);
+        } else {
+            row.addView(text(s, 12.5f, M3.PRIMARY, true));
+        }
+        return row;
+    }
+
+    /** 一张设置卡（自带内外边距，直接塞内容）。 */
+    LinearLayout settingCard() {
+        LinearLayout c2 = card();
+        LinearLayout.LayoutParams lp = matchWrap(10);
+        c2.setLayoutParams(lp);
+        c2.setPadding(dp(16), dp(12), dp(16), dp(12));
+        return c2;
+    }
+
     /** 卡片标题行：左边标题，右边可选的说明文字。 */
     LinearLayout cardHeader(String title, String trailing) {
         LinearLayout row = row();

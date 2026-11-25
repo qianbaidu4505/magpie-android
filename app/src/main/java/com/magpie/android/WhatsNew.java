@@ -39,6 +39,13 @@ final class WhatsNew {
     private static final android.util.SparseArray<String[]> NOTES = new android.util.SparseArray<>();
 
     static {
+        // 209 / 1.8.29
+        NOTES.put(209, new String[]{
+                "界面",
+                "• 统一全站排版：新增卡片标题组件（图标底块+标题+说明）、顶部说明横幅（主色容器底+图标）、设置行（标题+说明+右侧控件+细分隔线）、带图标的分组标题",
+                "• 省电策略实验室、缓存清理、错误诊断、Marvis 粘贴回调四个页面按新组件重排：说明改横幅、分组标题带图标、收集项改图标列表",
+                "• 悬浮球保留「可拖出屏幕外」能力，够不着时用设置页「位置 → 复位」拉回",
+        });
         // 208 / 1.8.28
         NOTES.put(208, new String[]{
                 "修复",
