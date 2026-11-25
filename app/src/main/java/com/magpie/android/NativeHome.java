@@ -1071,7 +1071,7 @@ public class NativeHome extends Activity {
             // 没开共享 ≠ 没法用：本机 127.0.0.1 调用网关接受任何值，
             // 上游 gateway.go: "listens on loopback and accepts anything"
             sb.append("\n\n本机调用\n  无需密钥：AI 工具的 Authorization 填任意值"
-                    + "（如 magpie），地址填上面那条即可。");
+                    + "（Magpie 默认密钥：magpie），地址填上面那条即可。");
             sb.append("\n\n局域网密钥\n  还没有（共享没开；开了才会生成给其它设备用的密钥）");
         }
 
@@ -1092,7 +1092,7 @@ public class NativeHome extends Activity {
             // 用户粘到 AI 工具配置里就能用，不用自己拼
             b.setNeutralButton("复制本机调用", (d, w) -> {
                 String example = "网关地址: " + url + "\n"
-                        + "Authorization: Bearer magpie  （本机调用，值任意）";
+                        + "Authorization: Bearer magpie  （Magpie 默认密钥：magpie）";
                 ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
                 if (cm != null) {
                     cm.setPrimaryClip(ClipData.newPlainText("magpie", example));
