@@ -57,6 +57,28 @@ final class Ui {
     // 基础图形
     // ------------------------------------------------------------------
 
+    /**
+     * 一个矢量图标（Lucide，24×24、2px 描边），按 M3 role 染色。
+     *
+     * <p>为什么换掉字符符号：以前菜单/底栏用的是 `♡ ⚙ ⚑ ⌘ ⟳` 这些 Unicode
+     * 字符，不同 ROM 字体渲染粗细/大小/基线全不一样，看起来廉价且不齐。
+     * Lucide 是 24×24 网格、统一 2px 描边的开源图标集（ISC 许可），跟
+     * M3 卡片的视觉语言天然契合。
+     *
+     * @param resId drawable 资源（res/drawable/ic_*.xml）
+     * @param role  M3 颜色角色（染色）
+     * @param sizeDp 图标边长（dp）
+     */
+    android.widget.ImageView icon(int resId, int role, float sizeDp) {
+        android.widget.ImageView iv = new android.widget.ImageView(ctx);
+        iv.setImageResource(resId);
+        iv.setColorFilter(c[role]);
+        iv.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+        int s = dp(sizeDp);
+        iv.setLayoutParams(new android.widget.LinearLayout.LayoutParams(s, s));
+        return iv;
+    }
+
     GradientDrawable round(int color, float radiusDp) {
         GradientDrawable d = new GradientDrawable();
         d.setColor(color);

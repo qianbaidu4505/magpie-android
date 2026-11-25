@@ -39,6 +39,12 @@ final class WhatsNew {
     private static final android.util.SparseArray<String[]> NOTES = new android.util.SparseArray<>();
 
     static {
+        // 202 / 1.8.22
+        NOTES.put(202, new String[]{
+                "界面",
+                "• 全部图标换成 Lucide 矢量图标（开源 ISC 许可，24×24 统一 2px 描边）：底部五个页签、菜单全部条目都改了。原来的 ♡ ⚙ ⚑ ◉ ≡ ◑ ◇ ⇄ 是系统字符，各手机渲染粗细不齐、看着廉价",
+                "• 菜单图标加了圆形底色块，跟卡片风格统一",
+        });
         // 200 / 1.8.20
         NOTES.put(200, new String[]{
                 "优化",

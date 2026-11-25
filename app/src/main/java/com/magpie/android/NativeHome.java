@@ -93,7 +93,7 @@ public class NativeHome extends Activity {
 
     private final List<TextView> tabViews = new ArrayList<>();
     /** 底栏每个 tab 的图标字，选中时一起变色。 */
-    private final List<TextView> tabGlyphs = new ArrayList<>();
+    private final List<android.widget.ImageView> tabGlyphs = new ArrayList<>();
     /** 底栏每个 tab 的整块视图，选中时给它挂胶囊底。 */
     private final List<android.widget.LinearLayout> tabItems = new ArrayList<>();
     /** 系统导航条高度：底栏要抬到它上面，内容则铺到它下面（真沉浸）。 */
@@ -497,7 +497,10 @@ public class NativeHome extends Activity {
         tabBar.setLayoutParams(blp);
 
         String[] names = {"概览", "用量", "账号", "脱敏", "路由"};
-        String[] glyphs = {"\u25C9", "\u2261", "\u25D1", "\u25C7", "\u21C4"};
+        // Lucide 矢量图标（替换原来的 ◉ ≡ ◑ ◇ ⇄ 字符符号）
+        int[] glyphs = {R.drawable.ic_layout_dashboard, R.drawable.ic_chart_column,
+                R.drawable.ic_circle_user_round, R.drawable.ic_shield_check,
+                R.drawable.ic_route};
         tabViews.clear();
         tabGlyphs.clear();
         for (int i = 0; i < names.length; i++) {
@@ -507,9 +510,7 @@ public class NativeHome extends Activity {
             item.setGravity(Gravity.CENTER);
             item.setPadding(0, ui.dp(5), 0, ui.dp(5));
 
-            TextView glyph = ui.text(glyphs[i], 15, M3.ON_SURFACE_VARIANT, false);
-            glyph.setGravity(Gravity.CENTER);
-            glyph.setIncludeFontPadding(false);
+            android.widget.ImageView glyph = ui.icon(glyphs[i], M3.ON_SURFACE_VARIANT, 22);
             item.addView(glyph);
 
             TextView t = ui.text(names[i], 11.5f, M3.ON_SURFACE_VARIANT, true);
@@ -573,7 +574,7 @@ public class NativeHome extends Activity {
             TextView t = tabViews.get(i);
             t.setTextColor(on ? ui.col(onFg) : ui.col(M3.ON_SURFACE_VARIANT));
             if (i < tabGlyphs.size()) {
-                tabGlyphs.get(i).setTextColor(on
+                tabGlyphs.get(i).setColorFilter(on
                         ? ui.col(onFg) : ui.col(M3.ON_SURFACE_VARIANT));
                 tabGlyphs.get(i).setAlpha(on ? 1f : 0.75f);
             }
@@ -762,12 +763,22 @@ public class NativeHome extends Activity {
                         "端口、局域网访问、外观与开机启动",
                         "官方仓库、移植作者与许可证"},
         };
-        final String[][] icons = {
-                {"\u2661", "\u2699", "\u2691", "\u2318"},
-                {"\u27f3", "\u25a4", "\u29c9", "\u26a1"},
-                {"\u2913", "\u270e", "\u25a4", "\u26a1", "\u267b"},
-                {"\u21e9", "\u2b07", "\u2699"},
-                {"\u29c9", "\u2197", "\u2699", "\u24d8"},
+        final int[][] icons = {
+                // 控制台：赞赏 / 控制后台 / 错误诊断 / AI排查端口
+                {R.drawable.ic_hand_heart, R.drawable.ic_monitor_cog,
+                        R.drawable.ic_stethoscope, R.drawable.ic_bot},
+                // 网关：重启 / 日志 / 复制地址 / 电池优化
+                {R.drawable.ic_rotate_cw, R.drawable.ic_file_text,
+                        R.drawable.ic_copy, R.drawable.ic_zap},
+                // 插件：导入 / 粘贴回调 / 文件管理器 / 省电实验室 / 缓存清理
+                {R.drawable.ic_folder, R.drawable.ic_link, R.drawable.ic_folder_open,
+                        R.drawable.ic_flask_conical, R.drawable.ic_trash_2},
+                // 更新：检查内核 / 检查App / 更新设置
+                {R.drawable.ic_download, R.drawable.ic_arrow_down_to_line,
+                        R.drawable.ic_settings_2},
+                // 其他：网页登录链接 / 浏览器 / 设置 / 关于
+                {R.drawable.ic_link, R.drawable.ic_external_link,
+                        R.drawable.ic_settings, R.drawable.ic_info},
         };
 
         final Dialog dialog = new Dialog(this, R.style.Theme_Magpie_Sheet);
@@ -841,7 +852,7 @@ public class NativeHome extends Activity {
     }
 
     /** 菜单里一张可点的卡片：图标底块 + 标题 + 说明，带描边和涟漪。 */
-    private View menuCard(String icon, String title, String sub, Runnable action) {
+    private View menuCard(int iconRes, String title, String sub, Runnable action) {
         LinearLayout row = ui.row();
         GradientDrawable cardBg = ui.glowStroke(ui.col(M3.SURFACE_CONTAINER), 16,
                 ui.col(M3.OUTLINE_VARIANT), 1);
@@ -855,10 +866,12 @@ public class NativeHome extends Activity {
         rlp.bottomMargin = ui.dp(7);
         row.setLayoutParams(rlp);
 
-        TextView ic = ui.text(icon, 15, M3.ON_SECONDARY_CONTAINER, false);
-        ic.setGravity(Gravity.CENTER);
-        ic.setBackground(ui.round(ui.col(M3.SECONDARY_CONTAINER), 12));
-        row.addView(ic, new LinearLayout.LayoutParams(ui.dp(36), ui.dp(36)));
+        // 图标底块：secondary 容器圆形底 + Lucide 矢量图标（按 M3 染色）
+        LinearLayout iconBox = new LinearLayout(this);
+        iconBox.setGravity(Gravity.CENTER);
+        iconBox.setBackground(ui.round(ui.col(M3.SECONDARY_CONTAINER), 12));
+        iconBox.addView(ui.icon(iconRes, M3.ON_SECONDARY_CONTAINER, 20));
+        row.addView(iconBox, new LinearLayout.LayoutParams(ui.dp(36), ui.dp(36)));
 
         LinearLayout texts = ui.column();
         LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(
