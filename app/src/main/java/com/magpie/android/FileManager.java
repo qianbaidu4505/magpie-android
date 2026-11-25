@@ -201,39 +201,38 @@ final class FileManager {
             }
         }
 
-        // 占位 positive button：AlertDialog 只有调过 setXxxButton 才会创建那个按钮，
-        // 不占位的话 getButton 返回 null、按钮区直接消失（1.8.16 的 bug）
         final AlertDialog dlg = new AlertDialog.Builder(act)
                 .setTitle("文件管理器")
                 .setView(scroll)
-                .setPositiveButton("", null)
                 .create();
-        // 「关闭」两态：根目录=真关闭；子目录=返回上一级。
-        // 文案跟着变，用户不用猜。
+        // 「关闭/返回上级」做成 view 内自绘底栏（不用 AlertDialog 按钮体系：
+        // MIUI 上占位按钮反复出幺蛾子——1.8.16 消失、1.8.17 空白，自绘的想怎么画怎么画）。
+        // 两态：根目录=真关闭；子目录=返回上一级，文案跟着变。
         boolean atRoot = cur.getAbsolutePath().equals(rootPath);
-        dlg.setOnShowListener(d -> {
-            android.widget.Button b = dlg.getButton(AlertDialog.BUTTON_POSITIVE);
-            if (b == null) {
-                return;
-            }
-            b.setText(atRoot ? "关闭" : "返回上级");
-            b.setOnClickListener(v -> {
-                if (atRoot) {
-                    dlg.dismiss();
-                    if (current == dlg) {
-                        current = null;
-                    }
-                } else {
-                    File up = cur.getParentFile();
-                    if (up != null) {
-                        dlg.dismiss();
-                        show(act, ui, up);
-                    } else {
-                        dlg.dismiss();
-                    }
+        TextView bottomBtn = ui.pill(atRoot ? "关闭" : "↑ 返回上级",
+                M3.PRIMARY_CONTAINER, M3.ON_PRIMARY_CONTAINER);
+        bottomBtn.setPadding(ui.dp(22), ui.dp(11), ui.dp(22), ui.dp(11));
+        bottomBtn.setGravity(android.view.Gravity.CENTER);
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        blp.topMargin = ui.dp(10);
+        bottomBtn.setOnClickListener(v -> {
+            if (atRoot) {
+                dlg.dismiss();
+                if (current == dlg) {
+                    current = null;
                 }
-            });
+            } else {
+                File up = cur.getParentFile();
+                if (up != null) {
+                    dlg.dismiss();
+                    show(act, ui, up);
+                } else {
+                    dlg.dismiss();
+                }
+            }
         });
+        box.addView(bottomBtn, blp);
         styleDialog(act, ui, dlg);
         return dlg;
     }

@@ -39,6 +39,11 @@ final class WhatsNew {
     private static final android.util.SparseArray<String[]> NOTES = new android.util.SparseArray<>();
 
     static {
+        // 198 / 1.8.18
+        NOTES.put(198, new String[]{
+                "修复",
+                "• 文件管理器的关闭/返回按钮改成界面内自绘卡片按钮：不再依赖系统对话框按钮（MIUI 上两次出现消失问题），这次一定显示",
+        });
         // 197 / 1.8.17
         NOTES.put(197, new String[]{
                 "修复",
