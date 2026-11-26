@@ -155,19 +155,12 @@ final class NativePageMasking extends NativePage {
             MagpieApi.Result pm = MagpieApi.get(host, "/api/privacy-model", 6000, 15000);
             JSONObject sumJson = sum.ok() ? sum.json() : null;
             JSONObject recJson = recs.ok() ? recs.json() : null;
-            // 脱敏开关的真实判定（照内核 maskOn()）：redact 开 / 个人信息开 /
-            // 有自定义脱敏词，任一即视为开启；不是 settings.mask
-            boolean on = false;
+            // 脱敏总开关的状态 = 壳自己的 maskMaster 闸（方案 B）。
+            // 为什么不用上游 Wanted()（redact||redactPersonal||词>0）：关总闸时
+            // 我们把子开关全写 false，但脱敏词可能还留在配置里（恢复要用），
+            // Wanted() 会误判成开着。总闸是壳唯一权威。
+            boolean on = Prefs.maskMaster(host);
             JSONObject s = st.ok() ? st.json() : null;
-            if (s != null) {
-                JSONObject settings = s.optJSONObject("settings");
-                if (settings != null) {
-                    on = NativeData.flag(settings, "redact")
-                            || NativeData.flag(settings, "redactPersonal")
-                            || settings.optJSONArray("redactWords") != null
-                            && settings.optJSONArray("redactWords").length() > 0;
-                }
-            }
             lastSummary = sumJson;
             buildPairs(pairSrc);
             final JSONObject fSum = sumJson;
@@ -438,18 +431,34 @@ final class NativePageMasking extends NativePage {
         sub.setLayoutParams(ui.matchWrap(4));
         titles.addView(sub);
         head.addView(titles, ui.weight(1));
-        // 「已开启/已关闭」胶囊 = 一键总开关：点击切换 settings.redact（密钥脱敏主开关），
-        // 整份 settings 原样回传只改这一个字段（与内核网页 savePrefs 一致）
-        TextView toggle = ui.pill(on ? "已开启" : "已关闭",
-                on ? M3.TERTIARY_CONTAINER : M3.SURFACE_CONTAINER_HIGH,
-                on ? M3.ON_TERTIARY_CONTAINER : M3.ON_SURFACE);
+        // 脱敏总闸（方案 B）：一个大滑动开关，控制整个脱敏功能。
+        //
+        // 上游没有独立的总开关字段——脱敏是否生效由 Wanted() 决定：
+        //   redact || redactPersonal || redactWords 非空
+        // 所以「整体关」只能是：把子开关全写 false，词表先快照到壳里再清掉；
+        // 「开」则把快照写回去。总闸状态记在壳的 Prefs.maskMaster，
+        // 关着的时候子开关在设置面板里一律灰掉（防止单开一个又被总闸盖掉）。
+        View toggle = ui.toggleSwitch(on);
+        toggle.setContentDescription(on ? "脱敏已开启，点按关闭" : "脱敏已关闭，点按开启");
         if (maskSettings != null) {
             toggle.setOnClickListener(v -> {
                 toggle.setEnabled(false);
-                toggle.setText("保存中…");
-                boolean next = !NativeData.flag(maskSettings, "redact");
-                saveMaskPrefs(maskSettings, "redact", next, toggle);
-                toggle.setEnabled(true);
+                boolean next = !on;
+                host.bg(() -> {
+                    String err = applyMaskMaster(maskSettings, next);
+                    host.post(() -> {
+                        toggle.setEnabled(true);
+                        if (err == null) {
+                            Prefs.setMaskMaster(host, next);
+                            host.toastPublic(next
+                                    ? "脱敏已开启，下一个请求生效"
+                                    : "脱敏已整体关闭，下一个请求生效");
+                            refresh(true);
+                        } else {
+                            host.toastPublic("保存失败：" + err);
+                        }
+                    });
+                });
             });
         }
         head.addView(toggle);
@@ -1479,6 +1488,7 @@ final class NativePageMasking extends NativePage {
      * 不带全量会把其它设置清掉。
      */
     private void showMaskSettings() {
+        boolean masterOn = Prefs.maskMaster(host);
         android.app.Dialog dlg = new android.app.Dialog(host, R.style.Theme_Magpie_Sheet);
         LinearLayout root = ui.column();
         GradientDrawable bg = ui.round(ui.col(M3.SURFACE_CONTAINER_LOW), 28);
@@ -1493,6 +1503,14 @@ final class NativePageMasking extends NativePage {
                 M3.ON_SURFACE_VARIANT, false);
         sub.setPadding(ui.dp(4), ui.dp(2), 0, ui.dp(10));
         root.addView(sub);
+
+        // 总闸关着时：顶部一条提示 + 所有子开关保存动作直接拦下
+        if (!masterOn) {
+            View warn = ui.banner(R.drawable.ic_shield_check,
+                    "脱敏总开关当前是关闭的，整个脱敏功能没有生效。"
+                            + "先回脱敏页打开右上角的总开关，再回来调这些。");
+            root.addView(warn);
+        }
 
         LinearLayout rows = ui.column();
         root.addView(rows);
@@ -1702,8 +1720,75 @@ final class NativePageMasking extends NativePage {
      * 保存脱敏设置：POST /api/settings，整份 settings 原样回传、只改目标字段。
      * 与内核网页的 savePrefs 行为一致。
      */
+    /**
+     * 应用脱敏总闸：关=快照子开关后全部写 false；开=把快照写回。
+     *
+     * <p>快照的字段：redact、redactPersonal、redactWords、redactKinds、
+     * redactWordsAnyCase、redactWordsWhole。只快照词表相关（密钥/个人信息
+     * 两个 bool 直接在快照里存原值）。整份 settings 其余字段原样回传，
+     * 与内核网页 savePrefs 的做法一致。
+     *
+     * @return null=成功，否则错误原因
+     */
+    private String applyMaskMaster(JSONObject settings, boolean on) {
+        try {
+            if (!on) {
+                // 关：先把当前值快照下来（词表整块存）
+                org.json.JSONObject snap = new org.json.JSONObject();
+                String[] bools = {"redact", "redactPersonal", "redactWordsAnyCase",
+                        "redactWordsWhole", "redactShape", "redactModel"};
+                for (String k : bools) {
+                    snap.put(k, NativeData.flag(settings, k));
+                }
+                org.json.JSONArray words = settings.optJSONArray("redactWords");
+                snap.put("redactWords", words == null ? new org.json.JSONArray() : words);
+                org.json.JSONObject kinds = settings.optJSONObject("redactKinds");
+                snap.put("redactKinds", kinds == null ? new org.json.JSONObject() : kinds);
+                Prefs.setMaskSnapshot(host, snap.toString());
+
+                // 全部写 false + 清空词表
+                settings.put("redact", false);
+                settings.put("redactPersonal", false);
+                settings.put("redactWords", new org.json.JSONArray());
+            } else {
+                // 开：恢复快照（没快照就只开密钥+个人信息，词表留空）
+                String snapStr = Prefs.maskSnapshot(host);
+                if (!snapStr.isEmpty()) {
+                    org.json.JSONObject snap = new org.json.JSONObject(snapStr);
+                    String[] bools = {"redact", "redactPersonal", "redactWordsAnyCase",
+                            "redactWordsWhole", "redactShape", "redactModel"};
+                    for (String k : bools) {
+                        if (snap.has(k)) {
+                            settings.put(k, snap.getBoolean(k));
+                        }
+                    }
+                    if (snap.has("redactWords")) {
+                        settings.put("redactWords", snap.getJSONArray("redactWords"));
+                    }
+                    if (snap.has("redactKinds")) {
+                        settings.put("redactKinds", snap.getJSONObject("redactKinds"));
+                    }
+                } else {
+                    settings.put("redact", true);
+                    settings.put("redactPersonal", true);
+                }
+            }
+            MagpieApi.Result r = MagpieApi.post(host, "/api/settings",
+                    settings.toString(), 20000);
+            return r.ok() ? null : r.why();
+        } catch (Exception e) {
+            return e.getMessage() == null ? e.toString() : e.getMessage();
+        }
+    }
+
     private void saveMaskPrefs(JSONObject settings, String key, boolean on,
                                TextView status) {
+        // 总闸关着时拦下所有子开关的保存：写了也会被总闸口径盖掉，
+        // 不如直接说清楚，免得用户以为改成功了
+        if (!Prefs.maskMaster(host)) {
+            status.setText("总开关已关闭：先回脱敏页打开右上角总开关");
+            return;
+        }
         if (key != null) {
             try {
                 settings.put(key, on);

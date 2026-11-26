@@ -172,12 +172,14 @@ final class NativeData {
      * （cache_unknown）要从分母里扣掉，否则一律读成「没命中」。
      */
     static double cacheHit(JSONObject totals, JSONObject block) {
-        int read = num(totals, "cache_read");
-        int write = num(totals, "cache_write");
-        int input = num(totals, "input");
-        long denom = (long) read + write + input;
+        // 这里必须用 lng()：30 天/全部的累计量会超过 int 上限（21.4 亿），
+        // 用 num() 会强转成负数，denom <= 0 直接返回 0，命中率就永远是 0%。
+        long read = lng(totals, "cache_read");
+        long write = lng(totals, "cache_write");
+        long input = lng(totals, "input");
+        long denom = read + write + input;
         if (block != null) {
-            denom -= num(block, "cache_unknown");
+            denom -= lng(block, "cache_unknown");
         }
         if (denom <= 0) {
             return 0;

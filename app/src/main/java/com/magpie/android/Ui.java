@@ -507,6 +507,45 @@ final class Ui {
         return box;
     }
 
+    /**
+     * 大滑动开关（Material 风格的独立开关，不是 Switch 复合控件）。
+     *
+     * <p>长 52dp 高 30dp 的胶囊轨道 + 一个 24dp 圆钮，开=主色轨道钮在右，
+     * 关=灰轨道钮在左。为什么自绘：系统的 Switch 字号大时轨道会被文字撑开，
+     * 放在标题旁边比例也不对；这个小开关就是给「放在一行右侧」用的。
+     */
+    View toggleSwitch(boolean on) {
+        final float R = 15f;          // 轨道半高
+        LinearLayout track = new LinearLayout(ctx);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(on ? c[M3.TERTIARY] : c[M3.OUTLINE_VARIANT]);
+        bg.setCornerRadius(dp(R));
+        track.setBackground(bg);
+        int w = dp(52), h = dp(30);
+        int pad = dp(3);
+        track.setPadding(pad, pad, pad, pad);
+        track.setGravity(on ? Gravity.END : Gravity.START);
+        track.setClickable(true);
+        track.setFocusable(true);
+
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(w, h);
+        // 涟漪裁成圆角
+        android.graphics.drawable.RippleDrawable ripple = new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(0x33FFFFFF), bg, bg);
+        track.setBackground(ripple);
+        track.setLayoutParams(lp);
+
+        View knob = new View(ctx);
+        GradientDrawable kb = new GradientDrawable();
+        kb.setColor(0xFFFFFFFF);
+        kb.setShape(GradientDrawable.OVAL);
+        kb.setColor(on ? 0xFFFFFFFF : 0xFFF2F3F5);
+        knob.setBackground(kb);
+        knob.setElevation(dp(2));
+        track.addView(knob, new LinearLayout.LayoutParams(dp(24), dp(24)));
+        return track;
+    }
+
     /** 带底色的数字块（bigStat 的卡片化版本）。 */
     View statTile(String value, String label, int bgRole, int fgRole) {
         LinearLayout box = column();

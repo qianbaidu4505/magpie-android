@@ -74,6 +74,13 @@ final class M3 {
                 0xFFE6EBEF, 0xFF3E4750, 0xFFB8C0C8, 0xFFDFE4E9, 0xFFF2F4F6, 0xFFFFFFFF,
                 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFCFCFC, 0xFFF3F5F7, 0xFFEBEEF1, 0xFF14181C,
                 0xFFFCFCFC, 0xFF8FC7A8, 0xFF000000, 0xFFC98A18},
+        // 墨·Paper（浅色）: 暖灰绿底 + 白卡，无描边，深绿强调（找正规会话 spec.md §2，WCAG 修正版）
+        {0xFF0B7A5A, 0xFFFFFFFF, 0xFFE7F2EE, 0xFF0B3B2C, 0xFF5F6A65, 0xFFFFFFFF,
+                0xFFEDF1EE, 0xFF0E1211, 0xFF0B7A5A, 0xFFFFFFFF, 0xFFE7F2EE, 0xFF0B3B2C,
+                0xFFC23B2E, 0xFFFFFFFF, 0xFFF8E2DF, 0xFF7A1D14, 0xFFF4F6F4, 0xFF0E1211,
+                0xFFEDF1EE, 0xFF5F6A65, 0xFF8A948F, 0xFFE3E8E4, 0xFFE2E6E3, 0xFFFFFFFF,
+                0xFFFFFFFF, 0xFFFFFFFF, 0xFFF7F9F7, 0xFFEDF1EE, 0xFFE3E8E4, 0xFF0E1211,
+                0xFFF4F6F4, 0xFF0B7A5A, 0xFF000000, 0xFF96600F},
     };
 
     static final int[][] DARK = {
@@ -93,6 +100,13 @@ final class M3 {
                 0xFF16191D, 0xFF8A949E, 0xFF3A424A, 0xFF1C2126, 0xFF000000, 0xFF0C0F12,
                 0xFF000000, 0xFF0C0F12, 0xFF11151A, 0xFF161A1F, 0xFF1B2025, 0xFFD8DEE4,
                 0xFF000000, 0xFF4ECB8C, 0xFF000000, 0xFFB07D14},
+        // 墨·Ink（深色）: 深墨 #0A0C0D 底 / #121618 卡 / 单一信号色 #35E1A3，数据优先（spec.md §2，a11y 修正版）
+        {0xFF35E1A3, 0xFF0A0C0D, 0xFF17322B, 0xFFECF2EF, 0xFF98A29D, 0xFF0A0C0D,
+                0xFF1A1F22, 0xFFECF2EF, 0xFF35E1A3, 0xFF0A0C0D, 0xFF17322B, 0xFFECF2EF,
+                0xFFFF6E60, 0xFF0A0C0D, 0xFF3A1A16, 0xFFF7DADA, 0xFF0A0C0D, 0xFFECF2EF,
+                0xFF1A1F22, 0xFF98A29D, 0xFF3A424A, 0xFF232A2D, 0xFF07090A, 0xFF121618,
+                0xFF0E1113, 0xFF121618, 0xFF161B1F, 0xFF1A1F22, 0xFF20262B, 0xFFECF2EF,
+                0xFF0A0C0D, 0xFF127F58, 0xFF000000, 0xFFF5B85C},
     };
 
 
@@ -142,14 +156,18 @@ final class M3 {
         final int[] light;
         final int[] dark;
         final Style style;
+        /** true=固定暗色：无视「明暗」设置，永远用 dark 色板（终端、墨这类暗色系设计）。 */
+        final boolean fixedDark;
 
-        Theme(String key, String name, String desc, int[] light, int[] dark, Style style) {
+        Theme(String key, String name, String desc, int[] light, int[] dark, Style style,
+              boolean fixedDark) {
             this.key = key;
             this.name = name;
             this.desc = desc;
             this.light = light;
             this.dark = dark;
             this.style = style;
+            this.fixedDark = fixedDark;
         }
     }
 
@@ -159,6 +177,13 @@ final class M3 {
     static final Style STYLE_ORIGINAL = new Style(20f, 14f, 1f, false, 0, 28f, true, true);
     /** 终端：纯黑、4dp 硬角、等宽、无任何装饰。 */
     static final Style STYLE_TERMINAL = new Style(4f, 3f, 1f, false, 0, 26f, true, true);
+    /**
+     * 墨：深墨底 + 单一信号色，数据优先（「找正规」会话的 Ink &amp; Signal 方案）。
+     * 卡片 16dp 圆角、无阴影；描边压到最暗的发丝线（#232A2D 压 #121618，
+     * 对比度 1.25，视觉上等于无描边，但保留 1dp 让主题选择行的选中态有边）。
+     * 数字全部等宽 + tnum。
+     */
+    static final Style STYLE_INK = new Style(16f, 12f, 1f, false, 0, 27f, true, false);
 
     /**
      * 可选主题。下标存在 Prefs.THEME_STYLE 里，切换后整页重建。
@@ -168,11 +193,13 @@ final class M3 {
      */
     static final Theme[] THEMES = {
             new Theme("glass", "玻璃", "四张独立卡 · 主色发光描边 · 大圆角 · 柔和阴影",
-                    LIGHT[0], DARK[0], STYLE_GLASS),
+                    LIGHT[0], DARK[0], STYLE_GLASS, false),
             new Theme("original", "原版", "一整张大卡 · 分割线分组 · 等宽数字 · 无阴影",
-                    LIGHT[1], DARK[1], STYLE_ORIGINAL),
-            new Theme("terminal", "终端", "纯黑底 · 4dp 硬角 · 单色青绿 · 无装饰",
-                    LIGHT[2], DARK[2], STYLE_TERMINAL),
+                    LIGHT[1], DARK[1], STYLE_ORIGINAL, false),
+            new Theme("terminal", "终端", "纯黑底 · 4dp 硬角 · 单色青绿 · 固定暗色",
+                    LIGHT[2], DARK[2], STYLE_TERMINAL, true),
+            new Theme("ink", "墨", "深墨底 · 单一信号色 · 等宽数字 · 无描边 · 固定暗色",
+                    LIGHT[3], DARK[3], STYLE_INK, true),
     };
 
     /**
@@ -232,10 +259,10 @@ final class M3 {
                 & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
     }
 
-    /** 当前生效的令牌表：按主题取那一套，再按深/浅色分。 */
+    /** 当前生效的令牌表：按主题取那一套，再按深/浅色分。固定暗色主题无视明暗设置。 */
     static int[] current(Context ctx) {
         Theme t = theme(ctx);
-        return dark(ctx) ? t.dark : t.light;
+        return (t.fixedDark || dark(ctx)) ? t.dark : t.light;
     }
 
     /** 种子色圆点的显示色：深色模式略微提亮，否则原色。 */
@@ -258,10 +285,11 @@ final class M3 {
         return lum > 0.55 ? 0xFF1B1B1B : 0xFFFFFFFF;
     }
 
-    /** 按主题下标取令牌表；浅色/深色各一份，越界退回第 0 套。 */
+    /** 按主题下标取令牌表；浅色/深色各一份，越界退回第 0 套。固定暗色主题恒取 dark。 */
     static int[] of(Context ctx, int index) {
         int i = Math.max(0, Math.min(THEMES.length - 1, index));
-        return dark(ctx) ? THEMES[i].dark : THEMES[i].light;
+        Theme t = THEMES[i];
+        return (t.fixedDark || dark(ctx)) ? t.dark : t.light;
     }
 
     /**

@@ -25,6 +25,9 @@ final class ThemeSheet {
     }
 
     static void show(final Activity act, final Ui ui) {
+        // 供点击回调先关掉本弹窗，再交给 ThemeSwitch 做「淡出→重建→淡入」，
+        // 不然弹窗会一直盖在淡出动画上面，看起来还是「啪一下变了」。
+        final AlertDialog[] dlgHolder = new AlertDialog[1];
         ScrollView scroll = new ScrollView(act);
         scroll.setVerticalScrollBarEnabled(false);
 
@@ -40,7 +43,8 @@ final class ThemeSheet {
 
         TextView intro = ui.text("选完立刻生效，不用重启。"
                         + "「玻璃」是当前的样子，「原版」是最早那版整卡布局，"
-                        + "「终端」是纯黑高对比。",
+                        + "「终端」是纯黑高对比，「墨」是深墨底单一信号色的数据工具风。"
+                        + "「终端」「墨」是固定暗色，不受下面「明暗」设置影响。",
                 12, M3.ON_SURFACE_VARIANT, false);
         intro.setLineSpacing(ui.dp(2), 1f);
         intro.setLayoutParams(ui.matchWrap(10));
@@ -72,12 +76,24 @@ final class ThemeSheet {
                         return;
                     }
                     Prefs.setThemeMode(act, mode);
-                    act.recreate();
+                    if (dlgHolder[0] != null) {
+                        dlgHolder[0].dismiss();
+                    }
+                    ThemeSwitch.recreate(act);
                 }
             });
             modeRow.addView(chip);
         }
         root.addView(modeRow);
+
+        // 当前主题是固定暗色时，「明暗」对它无效——给一句提示，免得用户点了没反应以为坏了。
+        if (M3.theme(act).fixedDark) {
+            TextView mHint = ui.text("当前「" + M3.theme(act).name
+                            + "」是固定暗色，明暗设置对它无效（切到玻璃/原版才生效）",
+                    11, M3.ON_SURFACE_VARIANT, false);
+            mHint.setLayoutParams(ui.matchWrap(4));
+            root.addView(mHint);
+        }
 
         // ---- 二、风格 ----
         root.addView(ui.groupTitle(R.drawable.ic_layout_dashboard, "界面风格"));
@@ -92,7 +108,10 @@ final class ThemeSheet {
                         return;
                     }
                     M3.setThemeIndex(act, index);
-                    act.recreate();
+                    if (dlgHolder[0] != null) {
+                        dlgHolder[0].dismiss();
+                    }
+                    ThemeSwitch.recreate(act);
                 }
             }));
         }
@@ -109,6 +128,7 @@ final class ThemeSheet {
                 .setView(scroll)
                 .setNegativeButton("关闭", null)
                 .create();
+        dlgHolder[0] = dlg;
         try {
             if (dlg.getWindow() != null) {
                 dlg.getWindow().setBackgroundDrawable(ui.dialogBg());
@@ -175,7 +195,7 @@ final class ThemeSheet {
      * 圆角、描边、底色三样都能一眼看出差别。
      */
     private static View preview(Activity act, Ui ui, M3.Theme theme) {
-        boolean dk = M3.dark(act);
+        boolean dk = theme.fixedDark || M3.dark(act);
         final int[] t = dk ? theme.dark : theme.light;
         final M3.Style st = theme.style;
 

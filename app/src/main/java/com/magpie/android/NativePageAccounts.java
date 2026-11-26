@@ -210,7 +210,7 @@ final class NativePageAccounts extends NativePage {
             list.add(q);
         }
 
-        content.addView(summaryBar(quotas.length(), byProvider.size()));
+        content.addView(summaryBar(quotas, byProvider.size()));
         content.addView(expandAllBar(byProvider));
 
         for (Map.Entry<String, List<JSONObject>> e : byProvider.entrySet()) {
@@ -236,21 +236,31 @@ final class NativePageAccounts extends NativePage {
         });
     }
 
-    private View summaryBar(int accounts, int providers) {
+    private View summaryBar(JSONArray accounts, int providers) {
         LinearLayout card = ui.cardWithMargin();
         LinearLayout row = ui.row();
 
         // 上面三格：纯读数，结构一致（大数字 + 小标签）
-        row.addView(ui.stat(String.valueOf(accounts), "个账号", M3.ON_SURFACE, 1f));
+        row.addView(ui.stat(String.valueOf(accounts.length()), "个账号", M3.ON_SURFACE, 1f));
         row.addView(ui.stat(String.valueOf(providers), "家供应商", M3.ON_SURFACE, 1f));
 
-        // 已关闭：有值才用错误色强调，没值也占一格但与上面同结构，
-        // 不再让「自动签到」挤进第四格当半数字半入口的怪胎。
-        int off = offProviders.size();
-        row.addView(ui.stat(String.valueOf(off), "家已关闭",
-                off > 0 ? M3.ERROR : M3.ON_SURFACE_VARIANT, 1f));
+        // 第三格：总积分。比原来的「0 家已关闭」有用得多——那个值几乎恒为 0，
+        // 白占三分之一栏位；积分是每天都会看的数。
+        QuotaAgg.Total tot = QuotaAgg.total(accounts);
+        row.addView(ui.stat(tot.value, "总积分", M3.ON_SURFACE, 1f));
 
         card.addView(row);
+
+        // 总积分的「剩余：xxx」单独一行，跟在三格下面。
+        // 为什么不塞进 stat 的小标签：那行只有 11sp 一截宽度，写不下「剩余 1710 / 10903 积分」，
+        // 单独一行反而能写全，也不会把 15/8 那两个数字的基线拉歪。
+        if (!tot.note.isEmpty()) {
+            TextView note = ui.text(tot.note, 11.5f, M3.ON_SURFACE_VARIANT, false);
+            note.setSingleLine(true);
+            note.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            note.setLayoutParams(ui.matchWrap(6));
+            card.addView(note);
+        }
 
         // 下面一条状态行：状态点 + 文案 + 右对齐入口。
         // 和上面的「读数」在物理上分开，一类信息一件事。

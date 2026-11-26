@@ -127,6 +127,9 @@ public class NativeHome extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         ui = new Ui(this);
+        // 先把窗口底色铺成本主题的页面底色：主题切换重建的瞬间露出的是它，
+        // 不会闪白/闪黑（深色主题尤其明显）。
+        ThemeSwitch.paintWindow(this);
         Prefs.webKey(this);
         buildShell();
         setupImmersive();
@@ -152,6 +155,9 @@ public class NativeHome extends Activity {
         uiHandler.postDelayed(this::autoCheckUpdates, 4000);
         uiHandler.postDelayed(() -> ShellUpdateFlow.autoCheck(this, ShellUpdateFlow.m3(this, ui)),
                 6000);
+
+        // 若这次重建来自切主题：新内容从透明淡入，把重建卡顿藏成一次渐变
+        ThemeSwitch.fadeInIfPending(this);
     }
 
     /**
@@ -209,7 +215,7 @@ public class NativeHome extends Activity {
         // 从设置页回来可能换了种子色/莫奈，令牌变了就整页重来
         int[] now = M3.current(this);
         if (now[M3.SURFACE] != ui.col(M3.SURFACE)) {
-            recreate();
+            ThemeSwitch.recreate(this);
             return;
         }
         refreshHeader(true);
@@ -774,7 +780,7 @@ public class NativeHome extends Activity {
         final String[][] subs = {
                 {"微信赞赏码 + 支付宝收款码；纯属自愿，不构成任何服务承诺",
                         "magpie 自己的完整网页界面：插件、脱敏、同步备份都在这里",
-                        "原版 / 玻璃 / 终端三套观感，选完立刻生效",
+                        "原版 / 玻璃 / 终端 / 墨 四套观感，选完立刻生效",
                         "收集全局现场：日志、插件加载错误、流量归属、外部连接、进程资源，发作者排查",
                         "本机开一个诊断端口，手机上的 AI 软件或电脑都能直接连上来查"},
                 {"先停再起，改过密钥或配置后用得上",

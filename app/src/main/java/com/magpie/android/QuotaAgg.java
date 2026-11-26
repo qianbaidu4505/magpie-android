@@ -153,6 +153,131 @@ final class QuotaAgg {
         return sb.toString();
     }
 
+    /**
+     * 全部账号的总积分汇总：主数字 + 「剩余：xxx」一行。
+     *
+     * <p>为什么单独做：账号页顶部那格要显示的是「我总共还有多少」，
+     * 和列表里每家各一行的小结不是一回事——那边带账号数、最紧窗口等细节，
+     * 这里只要一个能一眼扫到的数。
+     */
+    static final class Total {
+        /** 主数字，如 "1.2万"、"366.08"；读不到就是 "—"。 */
+        String value = "—";
+        /** 副文，如 "剩余：1710 / 10903 积分"；读不到就是空串。 */
+        String note = "";
+    }
+
+    /** 把一组账号的总积分算出来：每个账号都取一个「剩余」数，加在一起。 */
+    static Total total(JSONArray accounts) {
+        Total t = new Total();
+        if (accounts == null || accounts.length() == 0) {
+            return t;
+        }
+
+        // 每个账号取一个数：优先 balance 字段（"1710 credits"、"$4.18"），
+        // 没有就走 windows[] 里最宽的那个窗口的剩余（limit - amount）。
+        // 按账号去重后直接相加 —— 不按单位分组（积分和 $ 混着加没意义），
+        // 也不按窗口名分组（名字各家起的都不一样）。
+        double sum = 0;
+        int counted = 0;
+        java.util.Set<String> seen = new java.util.HashSet<>();
+
+        for (int i = 0; i < accounts.length(); i++) {
+            JSONObject q = accounts.optJSONObject(i);
+            if (q == null || !NativeData.str(q, "error", "").isEmpty()) {
+                continue;
+            }
+            String user = NativeData.str(q, "user", "");
+            String alias = NativeData.str(q, "alias", "");
+            String shared = NativeData.str(q, "sharedBalance", "");
+            String key = shared.isEmpty()
+                    ? user + "|" + alias
+                    : "shared:" + shared;
+
+            double v = -1;
+
+            // ① balance 字段优先
+            Money m = parseBalance(NativeData.str(q, "balance", ""));
+            if (m.ok) {
+                v = m.value;
+            } else {
+                // ② 退到窗口：挑「剩余最多」的那个窗口当这个账号的数
+                JSONArray arr = NativeData.arr(q, "windows");
+                double best = -1;
+                for (int j = 0; j < arr.length(); j++) {
+                    JSONObject w = NativeData.at(arr, j);
+                    if (w == null || NativeData.flag(w, "unlimited") || NativeData.flag(w, "text")) {
+                        continue;
+                    }
+                    // 单位过滤：只有积分（credits/积分/点数）算进「总积分」。
+                    // 令牌窗口（Marvis 的 20M/20M tokens）和货币窗口不是积分，
+                    // 加进来会把总和撑成 20M 那种荒唐数。上游 creditUnit() 就是
+                    // 这个分类法：credits / usd / cny / eur / 空（tokens 等）。
+                    String unit = NativeData.str(w, "unit", "").toLowerCase(java.util.Locale.US);
+                    boolean isCredit = unit.contains("credit") || unit.contains("积分")
+                            || unit.contains("点数");
+                    if (!isCredit) {
+                        continue;
+                    }
+                    double limit = NativeData.dec(w, "limit");
+                    double amount = NativeData.dec(w, "amount");
+                    if (limit <= 0) {
+                        // 百分比窗口没有绝对数，跳过（不算进去，免得把别家的数歪掉）
+                        continue;
+                    }
+                    double left = limit - amount;
+                    if (left > best) {
+                        best = left;
+                    }
+                }
+                if (best >= 0) {
+                    v = best;
+                }
+            }
+
+            if (v < 0 || seen.contains(key)) {
+                continue;
+            }
+            seen.add(key);
+            sum += v;
+            counted++;
+        }
+
+        if (counted == 0) {
+            return t;
+        }
+
+        t.value = brief(sum);
+        StringBuilder note = new StringBuilder("剩余：").append(brief(sum));
+        // 非积分类窗口（令牌、$）单独提一句：它们是真实额度，但不属于「积分」
+        int otherWin = 0;
+        for (int i = 0; i < accounts.length(); i++) {
+            JSONObject q = accounts.optJSONObject(i);
+            if (q == null || !NativeData.str(q, "error", "").isEmpty()) {
+                continue;
+            }
+            JSONArray arr = NativeData.arr(q, "windows");
+            for (int j = 0; j < arr.length(); j++) {
+                JSONObject w = NativeData.at(arr, j);
+                if (w == null || NativeData.flag(w, "unlimited") || NativeData.flag(w, "text")) {
+                    continue;
+                }
+                String unit = NativeData.str(w, "unit", "").toLowerCase(java.util.Locale.US);
+                boolean isCredit = unit.contains("credit") || unit.contains("积分")
+                        || unit.contains("点数");
+                if (!isCredit && NativeData.dec(w, "limit") > 0) {
+                    otherWin++;
+                    break;
+                }
+            }
+        }
+        if (otherWin > 0) {
+            note.append(" · 另有 ").append(otherWin).append(" 家令牌/货币额度未计");
+        }
+        t.note = note.toString();
+        return t;
+    }
+
     private static String fmt(double v) {
         if (v == Math.rint(v)) {
             return String.valueOf((long) v);

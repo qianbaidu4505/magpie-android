@@ -213,11 +213,11 @@ final class CtxSheet {
         }
 
         // ---- 提示词缓存 ----
-        int cacheRead = 0;
+        long cacheRead = 0;
         JSONArray usage = NativeData.arr(route, "usage");
         if (usage.length() > 0) {
             JSONObject u = usage.optJSONObject(0);
-            cacheRead = NativeData.num(u, "cache_read");
+            cacheRead = NativeData.lng(u, "cache_read");
         }
         long promptTokens = tokens > 0 ? tokens : 1;
         double hit = Math.max(0, Math.min(100, cacheRead * 100.0 / promptTokens));

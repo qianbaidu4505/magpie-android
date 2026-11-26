@@ -257,6 +257,20 @@ final class Checkins {
                     out.put("plugin:" + id, on);
                 }
             }
+            // 补：pluginCheckins 里有、但 checkinPlugins 数组里没出现过的。
+            // 上游 PluginCheckins() 会跳过「没声明 auth.checkin」和「正在移动
+            // （插件更新中）」的 provider，那些插件就不在数组里。可是用户在
+            // 网页里明明把它的开关打开了——不补这一段，壳就只能显示成关。
+            if (pc != null) {
+                java.util.Iterator<String> it = pc.keys();
+                while (it.hasNext()) {
+                    String id = it.next();
+                    String key = "plugin:" + id;
+                    if (!out.containsKey(key)) {
+                        out.put(key, pc.optBoolean(id, false));
+                    }
+                }
+            }
         } catch (Exception e) {
             Log.w(TAG, "switches: " + e.getMessage());
         }

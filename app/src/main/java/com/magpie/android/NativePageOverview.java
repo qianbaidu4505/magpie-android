@@ -265,10 +265,10 @@ final class NativePageOverview extends NativePage {
      * </pre>
      */
     private View heroCard(JSONObject usage) {
-        long in = NativeData.num(usage, "input");
-        long out = NativeData.num(usage, "output");
-        long cacheRead = NativeData.num(usage, "cache_read");
-        long cacheWrite = NativeData.num(usage, "cache_write");
+        long in = NativeData.lng(usage, "input");
+        long out = NativeData.lng(usage, "output");
+        long cacheRead = NativeData.lng(usage, "cache_read");
+        long cacheWrite = NativeData.lng(usage, "cache_write");
         long calls = NativeData.num(usage, "calls");
         long errors = NativeData.num(usage, "errors");
         long retried = NativeData.num(usage, "retried");
@@ -282,7 +282,7 @@ final class NativePageOverview extends NativePage {
         long timed = NativeData.num(usage, "timed");
         long ttftMs = NativeData.num(usage, "ttft_ms");
         long decodeMs = NativeData.num(usage, "decode_ms");
-        long decodeOut = NativeData.num(usage, "decode_out");
+        long decodeOut = NativeData.lng(usage, "decode_out");
         long total = in + out + cacheRead + cacheWrite;
 
         // 设计稿：2×2 独立发光卡片，每张卡一个大数字 + 一句副文，卡片之间有间隙
@@ -371,7 +371,7 @@ final class NativePageOverview extends NativePage {
         LinearLayout.LayoutParams ulp = ui.wrap();
         ulp.bottomMargin = ui.dp(5);
         line.addView(unit, ulp);
-        long decodeN = NativeData.num(usage, "decode_n");
+        long decodeN = NativeData.lng(usage, "decode_n");
         if (decodeN > 0) {
             TextView cnt = ui.text("  " + decodeN + " 次计时", 12,
                     M3.ON_SURFACE_VARIANT, false);
@@ -733,8 +733,9 @@ final class NativePageOverview extends NativePage {
         long sum = 0;
         for (int i = 0; i < n; i++) {
             JSONObject p = NativeData.at(series, i);
-            long tok = NativeData.num(p, "input") + NativeData.num(p, "output")
-                    + NativeData.num(p, "cache_read") + NativeData.num(p, "cache_write");
+            // 逐日累加，单日就可能上亿；用 num() 会 int 溢出变负数，走势图整条塌掉
+            long tok = NativeData.lng(p, "input") + NativeData.lng(p, "output")
+                    + NativeData.lng(p, "cache_read") + NativeData.lng(p, "cache_write");
             values[i] = tok;
             sum += tok;
             labels[i] = NativeData.str(p, "label", "");

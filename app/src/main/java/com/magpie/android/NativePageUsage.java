@@ -144,10 +144,10 @@ final class NativePageUsage extends NativePage {
     private View summaryCard(JSONObject usage) {
         LinearLayout card = ui.cardWithMargin();
 
-        long in = NativeData.num(usage, "input");
-        long out = NativeData.num(usage, "output");
-        long cacheRead = NativeData.num(usage, "cache_read");
-        long cacheWrite = NativeData.num(usage, "cache_write");
+        long in = NativeData.lng(usage, "input");
+        long out = NativeData.lng(usage, "output");
+        long cacheRead = NativeData.lng(usage, "cache_read");
+        long cacheWrite = NativeData.lng(usage, "cache_write");
         long calls = NativeData.num(usage, "calls");
         long errors = NativeData.num(usage, "errors");
         long retried = NativeData.num(usage, "retried");
@@ -230,7 +230,7 @@ final class NativePageUsage extends NativePage {
         long top = 1;
         for (int i = 0; i < models.length(); i++) {
             JSONObject m = NativeData.at(models, i);
-            top = Math.max(top, NativeData.num(m, "input") + NativeData.num(m, "output"));
+            top = Math.max(top, NativeData.lng(m, "input") + NativeData.lng(m, "output"));
         }
         for (int i = 0; i < models.length() && i < 8; i++) {
             JSONObject m = NativeData.at(models, i);
@@ -255,7 +255,7 @@ final class NativePageUsage extends NativePage {
 
         String model = NativeData.str(g, "model", NativeData.str(g, "id", "?"));
         String provider = NativeData.str(g, "provider", "");
-        long tokens = NativeData.num(g, "input") + NativeData.num(g, "output");
+        long tokens = NativeData.lng(g, "input") + NativeData.lng(g, "output");
         long calls = NativeData.num(g, "calls");
         double cost = NativeData.dec(g, "cost");
 
@@ -319,7 +319,7 @@ final class NativePageUsage extends NativePage {
             String id = NativeData.str(a, "id", "?");
             String nm = NativeData.str(a, "name", NativeData.pretty(id));
             row.addView(ui.text(nm, 12.5f, M3.ON_SURFACE, i == 0), ui.weight(1));
-            long tok = NativeData.num(a, "input") + NativeData.num(a, "output");
+            long tok = NativeData.lng(a, "input") + NativeData.lng(a, "output");
             row.addView(ui.text(NativeData.count(NativeData.num(a, "calls")) + " 次 · "
                     + NativeData.tokens(tok), 11.5f, M3.ON_SURFACE_VARIANT, false));
             card.addView(row);

@@ -60,6 +60,10 @@ public final class Prefs {
     public static final String THEME_MODE = "theme_mode";
     /** 界面风格下标：0=经典，1=紧凑（对应 M3.THEMES）。 */
     public static final String THEME_STYLE = "theme_style";
+    /** 脱敏总开关（壳自己的闸）：false = 已把三个子开关全写 false 到 magpie。 */
+    public static final String MASK_MASTER = "mask_master";
+    /** 关总闸前对 redact/redactPersonal/redactWords/redactKinds 的快照（JSON），恢复用。 */
+    public static final String MASK_SNAPSHOT = "mask_snapshot";
 
     public static int themeMode(Context ctx) {
         int m = sp(ctx).getInt(THEME_MODE, 0);
@@ -84,6 +88,24 @@ public final class Prefs {
     public static void setThemeStyle(Context ctx, int i) {
         int v = i < 0 || i >= M3.THEMES.length ? M3.DEFAULT_THEME : i;
         sp(ctx).edit().putInt(THEME_STYLE, v).apply();
+    }
+
+    /** 脱敏总闸：true=正常（各子开关自己说话），false=已整体关闭。默认 true。 */
+    public static boolean maskMaster(Context ctx) {
+        return sp(ctx).getBoolean(MASK_MASTER, true);
+    }
+
+    public static void setMaskMaster(Context ctx, boolean on) {
+        sp(ctx).edit().putBoolean(MASK_MASTER, on).apply();
+    }
+
+    /** 关闸前的子开关快照。 */
+    public static String maskSnapshot(Context ctx) {
+        return sp(ctx).getString(MASK_SNAPSHOT, "");
+    }
+
+    public static void setMaskSnapshot(Context ctx, String json) {
+        sp(ctx).edit().putString(MASK_SNAPSHOT, json).apply();
     }
 
     /** 上次发「设为无限制」提醒的时间（毫秒），控制提醒频率。 */

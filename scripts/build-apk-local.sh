@@ -176,7 +176,10 @@ with zipfile.ZipFile(base) as zin, zipfile.ZipFile(out, 'w') as zout:
         zout.writestr(zipfile.ZipInfo('assets/MAGPIE_LICENSE.txt', (2026, 1, 1, 0, 0, 0)), f.read(), zipfile.ZIP_DEFLATED)
     # 二进制：不压缩，首启是拷贝而不是解压（aaptOptions noCompress "bin" 同义）
     # SKIP_KERNEL=1（壳子包）时不写内核——手机上已装的内核不会被覆盖
-    if os.path.exists(os.path.join(root, 'app/src/main/assets/bin/magpie.bin')):
+    skip_kernel = os.environ.get('SKIP_KERNEL', '0') == '1'
+    if skip_kernel:
+        print('    （壳子包：不含内核）')
+    elif os.path.exists(os.path.join(root, 'app/src/main/assets/bin/magpie.bin')):
         with open(os.path.join(root, 'app/src/main/assets/bin/magpie.bin'), 'rb') as f:
             zout.writestr(zipfile.ZipInfo('assets/bin/magpie.bin', (2026, 1, 1, 0, 0, 0)), f.read(), zipfile.ZIP_STORED)
     else:
