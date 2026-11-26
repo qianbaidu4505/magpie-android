@@ -112,30 +112,44 @@ final class ReportIssue {
         return sb.toString();
     }
 
-    private static void submit(Activity act, String userNote) {
-        String title = userNote.isEmpty() ? "问题反馈" : firstLine(userNote);
-        String body = buildBody(act, userNote);
-
-        // 完整日志先复制一份，URL 里装不下的部分用户能自己补
-        copyToClipboard(act, body);
-
-        String url = "https://github.com/" + ShellUpdater.owner() + "/" + ShellUpdater.repo()
-                + "/issues/new?labels=bug"
-                + "&title=" + enc(title)
-                + "&body=" + enc(body);
-        try {
-            act.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
-            Toast.makeText(act, "已在浏览器打开；完整内容也已复制到剪贴板",
-                    Toast.LENGTH_LONG).show();
-        } catch (Exception e) {
-            Toast.makeText(act, "打不开浏览器，内容已复制，请手动到 GitHub 提 issue",
-                    Toast.LENGTH_LONG).show();
-        }
+    private static void submit(final Activity act, final String userNote) {
+        // buildBody 里有 Updater.localVersion（要 exec 内核二进制，最多等 25s）+ 读日志，
+        // 不能放主线程（点按钮会 ANR）。后台组好正文，再回主线程复制/开浏览器。
+        new Thread(() -> {
+            final String title = userNote.isEmpty() ? "问题反馈" : firstLine(userNote);
+            final String body = buildBody(act, userNote);
+            act.runOnUiThread(() -> {
+                if (act.isFinishing()) {
+                    return;
+                }
+                copyToClipboard(act, body);
+                String url = "https://github.com/" + ShellUpdater.owner() + "/" + ShellUpdater.repo()
+                        + "/issues/new?labels=bug"
+                        + "&title=" + enc(title)
+                        + "&body=" + enc(body);
+                try {
+                    act.startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+                    Toast.makeText(act, "已在浏览器打开；完整内容也已复制到剪贴板",
+                            Toast.LENGTH_LONG).show();
+                } catch (Exception e) {
+                    Toast.makeText(act, "打不开浏览器，内容已复制，请手动到 GitHub 提 issue",
+                            Toast.LENGTH_LONG).show();
+                }
+            });
+        }, "magpie-report").start();
     }
 
-    private static void copyOnly(Activity act, String userNote) {
-        copyToClipboard(act, buildBody(act, userNote));
-        Toast.makeText(act, "已复制，可粘贴到 GitHub issue", Toast.LENGTH_SHORT).show();
+    private static void copyOnly(final Activity act, final String userNote) {
+        new Thread(() -> {
+            final String body = buildBody(act, userNote);
+            act.runOnUiThread(() -> {
+                if (act.isFinishing()) {
+                    return;
+                }
+                copyToClipboard(act, body);
+                Toast.makeText(act, "已复制，可粘贴到 GitHub issue", Toast.LENGTH_SHORT).show();
+            });
+        }, "magpie-report").start();
     }
 
     private static String deviceLine(Activity act) {

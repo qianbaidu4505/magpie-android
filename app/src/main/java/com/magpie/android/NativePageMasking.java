@@ -55,8 +55,9 @@ final class NativePageMasking extends NativePage {
      *
      * <p>key 同时收 id 和 name（小写），画图时两边都试，避免 id/显示名不一致导致查不到。
      */
-    private final java.util.Map<String, java.util.Map<String, Long>> pairs =
-            new java.util.LinkedHashMap<>();
+    /** agent → 模型 → 次数。后台整体重建后替换引用，主线程只读快照。 */
+    private volatile java.util.Map<String, java.util.Map<String, Long>> pairs =
+            java.util.Collections.emptyMap();
 
     NativePageMasking(NativeHome host) {
         super(host);
@@ -64,49 +65,54 @@ final class NativePageMasking extends NativePage {
 
     /** 从 records 聚合 agent → 模型 的真实配对。 */
     private void buildPairs(MagpieApi.Result src) {
-        pairs.clear();
+        java.util.Map<String, java.util.Map<String, Long>> next = new java.util.LinkedHashMap<>();
         try {
-            if (src == null || !src.ok() || src.json() == null) {
-                return;
-            }
-            JSONArray rs = NativeData.arr(src.json(), "records");
-            for (int i = 0; i < rs.length(); i++) {
-                JSONObject r = NativeData.at(rs, i);
-                if (r == null) {
-                    continue;
+            if (src != null && src.ok() && src.json() != null) {
+                JSONArray rs = NativeData.arr(src.json(), "records");
+                for (int i = 0; i < rs.length(); i++) {
+                    JSONObject r = NativeData.at(rs, i);
+                    if (r == null) {
+                        continue;
+                    }
+                    String ag = NativeData.str(r, "agent", "");
+                    String pv = NativeData.str(r, "provider", "");
+                    if (ag.isEmpty() || pv.isEmpty()) {
+                        continue;
+                    }
+                    long n = Math.max(1, NativeData.lng(r, "n"));
+                    // agent 和 provider 都按原样 + 小写各记一份，查表时更稳
+                    addPair(next, ag, pv, n);
+                    addPair(next, ag.toLowerCase(java.util.Locale.US),
+                            pv.toLowerCase(java.util.Locale.US), n);
                 }
-                String ag = NativeData.str(r, "agent", "");
-                String pv = NativeData.str(r, "provider", "");
-                if (ag.isEmpty() || pv.isEmpty()) {
-                    continue;
-                }
-                long n = Math.max(1, NativeData.lng(r, "n"));
-                // agent 和 provider 都按原样 + 小写各记一份，查表时更稳
-                addPair(ag, pv, n);
-                addPair(ag.toLowerCase(java.util.Locale.US), pv.toLowerCase(java.util.Locale.US), n);
             }
         } catch (Exception ignored) {
         }
+        // 构建完再整体换引用：主线程 onDraw 永远只读到一个完整快照，
+        // 读不到后台改到一半的 Map（原先是同一个 HashMap 后台写、前台读）。
+        pairs = next;
     }
 
     /** 查 agent 用过的模型表；id / name / 小写 都试一遍。 */
     private java.util.Map<String, Long> lookupPair(String id, String name) {
+        // 抓一次快照引用：读的过程中即使后台换了新快照，这次也只看这一份。
+        final java.util.Map<String, java.util.Map<String, Long>> snap = pairs;
         if (id != null && !id.isEmpty()) {
-            java.util.Map<String, Long> m = pairs.get(id);
+            java.util.Map<String, Long> m = snap.get(id);
             if (m != null) {
                 return m;
             }
-            m = pairs.get(id.toLowerCase(java.util.Locale.US));
+            m = snap.get(id.toLowerCase(java.util.Locale.US));
             if (m != null) {
                 return m;
             }
         }
         if (name != null && !name.isEmpty()) {
-            java.util.Map<String, Long> m = pairs.get(name);
+            java.util.Map<String, Long> m = snap.get(name);
             if (m != null) {
                 return m;
             }
-            m = pairs.get(name.toLowerCase(java.util.Locale.US));
+            m = snap.get(name.toLowerCase(java.util.Locale.US));
             if (m != null) {
                 return m;
             }
@@ -125,11 +131,12 @@ final class NativePageMasking extends NativePage {
         return name != null && used.containsKey(name.toLowerCase(java.util.Locale.US));
     }
 
-    private void addPair(String ag, String pv, long n) {
-        java.util.Map<String, Long> m = pairs.get(ag);
+    private static void addPair(java.util.Map<String, java.util.Map<String, Long>> map,
+                                String ag, String pv, long n) {
+        java.util.Map<String, Long> m = map.get(ag);
         if (m == null) {
             m = new java.util.LinkedHashMap<>();
-            pairs.put(ag, m);
+            map.put(ag, m);
         }
         Long was = m.get(pv);
         m.put(pv, (was == null ? 0L : was) + n);
@@ -142,8 +149,10 @@ final class NativePageMasking extends NativePage {
 
     @Override
     void load() {
-        host.bg(() -> {
-            MagpieApi.Result sum = MagpieApi.get(host,
+        // 本方法由 NativePage.refresh() 放到后台线程(bg)执行，这里不要再切
+        // 一次 host.bg：否则内层 Runnable 抛异常不会被 refresh 的 catch 兜住，
+        // loading 会永久卡 true、自动刷新失效。就在当前后台线程跑。
+        MagpieApi.Result sum = MagpieApi.get(host,
                     "/api/masking/summary?days=" + days, 6000, 15000);
             MagpieApi.Result recs = MagpieApi.get(host,
                     recordsQuery(40), 6000, 15000);
@@ -185,7 +194,6 @@ final class NativePageMasking extends NativePage {
                 });
                 done();
             });
-        });
     }
 
     // ------------------------------------------------------------------

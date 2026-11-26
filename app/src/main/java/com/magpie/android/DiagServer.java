@@ -50,8 +50,12 @@ public final class DiagServer {
     private final AtomicBoolean running = new AtomicBoolean(true);
     private final String key;
     private final boolean lan;
-    /** 请求处理池：有界（4 并发），plugins-state 这类 60 秒慢端点也堆不出千线程。 */
-    private final ExecutorService pool = Executors.newFixedThreadPool(4);
+    /** 请求处理池：固定 4 线程 + 有界队列(8)，满了由 accept 线程自己跑(CallerRunsPolicy)做背压。
+     *  之前 newFixedThreadPool 是无界队列，plugins-state 这类 60 秒慢端点能把队列堆爆。 */
+    private final ExecutorService pool = new java.util.concurrent.ThreadPoolExecutor(
+            4, 4, 0L, java.util.concurrent.TimeUnit.SECONDS,
+            new java.util.concurrent.ArrayBlockingQueue<Runnable>(8),
+            new java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy());
 
     private DiagServer(ServerSocket server, int port, String key, boolean lan) {
         this.server = server;
@@ -74,8 +78,9 @@ public final class DiagServer {
             try {
                 ServerSocket ss = new ServerSocket();
                 ss.setReuseAddress(true);
+                // 只有明确开了局域网才绑 0.0.0.0，否则只绑本机回环；backlog 16 限制半连接堆积。
                 ss.bind(new InetSocketAddress(InetAddress.getByName(
-                        lan ? "0.0.0.0" : "127.0.0.1"), p));
+                        lan ? "0.0.0.0" : "127.0.0.1"), p), 16);
                 current = new DiagServer(ss, p, key, lan);
                 current.begin();
                 Log.i(TAG, "诊断端口起来了: " + (lan ? "0.0.0.0" : "127.0.0.1") + ":" + p);
@@ -141,7 +146,14 @@ public final class DiagServer {
             // 吃掉剩余 header，顺手抓 Authorization（AI 客户端可能用它带 key）
             long body = 0;
             String auth = null;
+            int headerBytes = 0;
             while ((line = r.readLine()) != null && !line.isEmpty()) {
+                // 限 header 总长度，防止恶意的超长/超多 header 把内存堆爆。
+                headerBytes += line.length() + 2;
+                if (headerBytes > 16384) {
+                    send(c, 400, "{\"error\":\"header too large\"}");
+                    return;
+                }
                 String low = line.toLowerCase(Locale.US);
                 if (low.startsWith("content-length:")) {
                     body = parseLong(line.substring(15).trim());

@@ -356,7 +356,8 @@ final class Checkins {
         String vendor = vendorOf(providerId);
         JSONArray arr = state.optJSONArray("checkinAccounts");
         if (arr == null) {
-            return false;
+            // checkinAccounts 读空/缺失时，内置四家照样算有账号，别让签到按钮消失
+            return builtinApi(vendor) != null;
         }
         for (int i = 0; i < arr.length(); i++) {
             JSONObject a = NativeData.at(arr, i);

@@ -78,27 +78,34 @@ final class FloatingBall {
 
     /** 按当前设置同步显示状态（悬浮球与保活窗口各自独立开关）。 */
     static void sync(Context ctx) {
-        if (!canDraw(ctx)) {
+        // 一律用 applicationContext：静态 wm/View 绝不能持有 Activity（否则 Activity 泄漏）。
+        Context app = appCtx(ctx);
+        if (!canDraw(app)) {
             hideBall();
             hideKeepAlive();
             return;
         }
         if (wm == null) {
-            wm = (WindowManager) ctx.getSystemService(Context.WINDOW_SERVICE);
+            wm = (WindowManager) app.getSystemService(Context.WINDOW_SERVICE);
         }
         if (wm == null) {
             return;
         }
-        if (Prefs.ballEnabled(ctx)) {
-            showBall(ctx);
+        if (Prefs.ballEnabled(app)) {
+            showBall(app);
         } else {
             hideBall();
         }
-        if (Prefs.keepAliveEnabled(ctx)) {
-            showKeepAlive(ctx);
+        if (Prefs.keepAliveEnabled(app)) {
+            showKeepAlive(app);
         } else {
             hideKeepAlive();
         }
+    }
+
+    private static Context appCtx(Context ctx) {
+        Context app = ctx.getApplicationContext();
+        return app != null ? app : ctx;
     }
 
     /** 只显示悬浮球。 @return null 成功，否则错误说明 */
@@ -106,6 +113,7 @@ final class FloatingBall {
         if (ballView != null) {
             return null;
         }
+        ctx = appCtx(ctx);
         if (!canDraw(ctx)) {
             return "没有悬浮窗权限";
         }
@@ -142,6 +150,7 @@ final class FloatingBall {
         if (keepAliveView != null) {
             return null;
         }
+        ctx = appCtx(ctx);
         if (!canDraw(ctx)) {
             return "没有悬浮窗权限";
         }
@@ -200,6 +209,8 @@ final class FloatingBall {
     static void hide() {
         hideBall();
         hideKeepAlive();
+        // 两个窗口都移除后清掉静态 WindowManager 引用（配合 app 上下文，彻底不持有旧对象）
+        wm = null;
     }
 
     static boolean ballShowing() {

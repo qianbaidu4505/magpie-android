@@ -192,8 +192,15 @@ echo "→ zipalign"
 
 # --- 签名 -----------------------------------------------------------
 
+# 签名口令/别名一律优先从环境变量注入：KS_PASS / KEY_ALIAS（KEYSTORE 也可覆盖）。
+# 发布时务必显式传真实发布 keystore 与口令：KEYSTORE=... KS_PASS=... KEY_ALIAS=...；
+# 未设置时回退到仓库内的调试默认值并打印警告（仅限本地调试，切勿用于对外发布）。
+# 注意：密钥轮换不可擅自做（换发布钥会让已发布版本的更新签名不一致、无法覆盖升级）。
 KEYSTORE="${KEYSTORE:-$ROOT/scripts/debug.keystore}"
-KS_PASS="${KS_PASS:-android}"
+if [ -z "${KS_PASS:-}" ]; then
+    KS_PASS="android"
+    echo "警告：未设置 KS_PASS，回退到调试默认口令（仅限本地调试；发布前必须用环境变量注入真实口令）" >&2
+fi
 KEY_ALIAS="${KEY_ALIAS:-androiddebugkey}"
 if [ ! -f "$KEYSTORE" ]; then
     echo "→ 生成调试签名（$KEYSTORE）"

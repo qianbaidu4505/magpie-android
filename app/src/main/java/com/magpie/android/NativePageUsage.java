@@ -24,6 +24,8 @@ final class NativePageUsage extends NativePage {
 
     private static final String[] PERIODS = {"today", "7d", "30d", "all"};
     private String period = "today";
+    /** 加载期间又点了别的周期：记下来，这次 done 后按最新选择重载。 */
+    private String pendingPeriod;
 
     private LinearLayout body;
     private LinearLayout periodBar;
@@ -59,10 +61,17 @@ final class NativePageUsage extends NativePage {
             t.setPadding(ui.dp(14), ui.dp(8), ui.dp(14), ui.dp(8));
             final String key = p;
             t.setOnClickListener(v -> {
-                if (key.equals(period)) {
+                if (key.equals(period) && pendingPeriod == null) {
+                    return;
+                }
+                if (loading) {
+                    // 正在取数：只记下最新选择，等这次 done 后按它重载，
+                    // 避免「标题已是新周期、数据还是旧周期」。
+                    pendingPeriod = key;
                     return;
                 }
                 period = key;
+                pendingPeriod = null;
                 paintPeriodBar();
                 refresh(true);
             });
@@ -107,11 +116,13 @@ final class NativePageUsage extends NativePage {
 
     @Override
     void load() {
-        String p = period;
+        final String p = period;
         MagpieApi.Result usage = MagpieApi.usage(host, p);
         if (!usage.ok()) {
             host.post(() -> {
                 ensureSkeleton();
+                period = p;
+                paintPeriodBar();
                 body.removeAllViews();
                 failed(usage.why());
                 done();
@@ -124,10 +135,31 @@ final class NativePageUsage extends NativePage {
 
         host.post(() -> {
             ensureSkeleton();
+            // 周期条和标题都对齐到本次抓取的 p，避免标题/数据错位
+            period = p;
+            paintPeriodBar();
             body.removeAllViews();
             render(u, r, req.ok() ? null : req.why());
             done();
         });
+    }
+
+    /**
+     * 收尾：若加载期间又点了别的周期，这次画完后按最新选择再取一次。
+     * 这样周期条高亮、标题、数据三者始终一致。
+     */
+    @Override
+    void done() {
+        final String next = pendingPeriod;
+        pendingPeriod = null;
+        super.done();
+        if (next != null && !next.equals(period)) {
+            host.post(() -> {
+                period = next;
+                paintPeriodBar();
+                refresh(true);
+            });
+        }
     }
 
     // ------------------------------------------------------------------

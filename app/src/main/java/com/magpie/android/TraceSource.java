@@ -3,6 +3,8 @@ package com.magpie.android;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.util.concurrent.atomic.AtomicLong;
+
 /**
  * 实时路由面板的数据源：轮询 {@code /api/gateway/trace}。
  *
@@ -18,12 +20,20 @@ import org.json.JSONObject;
  *   <li>{@code done}/{@code status} —— 请求结束了没有</li>
  *   <li>{@code totals} —— 请求数 / 改道数 / 错误数，顶部那三个数字</li>
  * </ul>
+ *
+ * <p><b>并发安全</b>：stop 时旧 worker 可能还阻塞在 socket 读里（interrupt 不一定让它
+ * 立刻返回），紧接着 start 又会起新 worker。这里用「代际令牌 gen」区分：每次
+ * start/stop 都 +1，旧线程醒来发现代际不符就退出，绝不重复投递、也不会把 seq 写回
+ * 覆盖新代际。seq 用 AtomicLong，且只在代际一致时更新。
  */
 final class TraceSource {
 
 
     private volatile boolean running;
-    private long seq;
+    /** 长轮询读取起点；只在代际一致时更新。 */
+    private final AtomicLong seq = new AtomicLong(0);
+    /** 代际令牌：每次 start/stop 自增，旧线程据此判断自己是否过期。 */
+    private volatile int gen;
     private Thread worker;
 
     interface Sink {
@@ -39,31 +49,33 @@ final class TraceSource {
             return;
         }
         running = true;
-        worker = new Thread(() -> loop(host, sink), "magpie-trace");
-        worker.setDaemon(true);
-        worker.start();
+        final int myGen = ++gen;
+        // seq 归零放 start：切回路由页从「当前」重新读，不带上一次的值。
+        seq.set(0);
+        Thread t = new Thread(() -> loop(host, sink, myGen), "magpie-trace");
+        t.setDaemon(true);
+        worker = t;
+        t.start();
     }
 
     /**
-     * 停下。**seq 一并归零**：下次 start 时从「当前」重新读。
-     *
-     * <p>不归零的话，切回路由页时带着上次的 seq 去问，网关认为「这些你都
-     * 看过了」，中间这段时间发生的请求就永远收不到。
+     * 停下。用代际令牌让正在阻塞的旧线程失效；不再在这里改 seq（归零统一放 start）。
      */
     void stop() {
         running = false;
-        if (worker != null) {
-            worker.interrupt();
-            worker = null;
+        gen++;
+        Thread w = worker;
+        worker = null;
+        if (w != null) {
+            w.interrupt();
         }
-        seq = 0;
     }
 
-    private void loop(NativeHome host, Sink sink) {
-        while (running) {
-            String path = "/api/gateway/trace?after=" + seq + "&wait=1";
+    private void loop(NativeHome host, Sink sink, int myGen) {
+        while (running && gen == myGen) {
+            String path = "/api/gateway/trace?after=" + seq.get() + "&wait=1";
             MagpieApi.Result r = MagpieApi.get(host, path, MagpieApi.CONNECT_MS, MagpieApi.READ_POLL_MS);
-            if (!running) {
+            if (!running || gen != myGen) {
                 return;
             }
             if (!r.ok()) {
@@ -77,13 +89,17 @@ final class TraceSource {
                 sleep(1000);
                 continue;
             }
-            long nextSeq = o.optLong("seq", seq);
+            long nextSeq = o.optLong("seq", seq.get());
             JSONArray routes = NativeData.arr(o, "routes");
             JSONObject totals = NativeData.obj(o, "totals");
+            // 回调前再确认一次代际：旧线程不再往 UI 投递
+            if (!running || gen != myGen) {
+                return;
+            }
             sink.onTrace(routes, totals);
             // seq 没往前走说明只是超时回来了，立刻再接一次即可
             if (nextSeq > 0) {
-                seq = nextSeq;
+                seq.set(nextSeq);
             }
         }
     }

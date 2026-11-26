@@ -77,11 +77,16 @@ final class CacheCleaner {
             return -1;
         }
         List<Target> ts = targets(ctx);
+        // 双保险：bun 当前版本读不到时，绝不自动删任何 bun 目录。
+        String bunCurrent = readBunCurrent(new File(cacheRoot(ctx), "bun"));
         int n = 0;
         long freed = 0;
         for (Target t : ts) {
             // 只清可再生类：自动清理不碰生成的图/视频和识图缓存（损失不可逆）
             if (t.label.startsWith("生成图") || t.label.startsWith("识图缓存")) {
+                continue;
+            }
+            if (t.label.startsWith("旧版 Bun") && bunCurrent.isEmpty()) {
                 continue;
             }
             long sz = sizeOf(t.path);
@@ -134,10 +139,13 @@ final class CacheCleaner {
         List<Target> out = new ArrayList<>();
 
         // 1. Bun：只留 state.json 里 current 那个版本，其余全算垃圾
+        //    注意：current 为空（state.json 缺失/解析失败）时整轮跳过 bun 清理——
+        //    此时无法判断哪个是“当前运行时”，任何目录都不能当旧版删，否则会误删
+        //    正在使用的 Bun（不可逆，magpie 直接起不来）。
         File bunRoot = new File(root, "bun");
         String current = readBunCurrent(bunRoot);
         File[] buns = bunRoot.listFiles();
-        if (buns != null) {
+        if (buns != null && !current.isEmpty()) {
             for (File d : buns) {
                 if (!d.isDirectory()) {
                     continue;

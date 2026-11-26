@@ -57,8 +57,14 @@ public class GatewayService extends Service {
     private static final int NOTIF_ID = 9101;
     /** 只有用户明确停止服务时才移除；运行/重试状态均保持前台通知常驻。 */
     private static final int FOREGROUND_FLAGS = Notification.FLAG_ONGOING_EVENT;
-    /** 前台通知最后一次展示的网关状态（null=未知），避免每次刷新都重发通知。 */
-    private static volatile Boolean lastNotifAlive;
+    /** 前台通知上一次真正展示的状态；用于去重，也用于自愈对账。 */
+    private static final int ST_UNKNOWN = 0, ST_STARTING = 1, ST_RUNNING = 2, ST_DOWN = 3;
+    private static volatile int lastPostedState = ST_UNKNOWN;
+    /** 后台「通知对账」线程：每几秒按真实端口状态校正通知，兜住各种卡在「正在启动」。 */
+    private Thread notifThread;
+    /** 对账线程的存活标志：与 stopping 解耦，restart（stopping 会短暂 true→false）
+     *  期间不会把线程误杀；只有 onDestroy 才置 false。 */
+    private volatile boolean notifTickerRunning;
     private static final String CHANNEL_ID = "magpie_gateway";
     public static final String ACTION_RESTART = "com.magpie.android.action.RESTART";
     public static final String EXTRA_FORCE = "force";
@@ -84,6 +90,10 @@ public class GatewayService extends Service {
     private static volatile boolean screenOff;
     /** 休眠守夜监测的注册器，Service 停止时取消。 */
     private static android.content.BroadcastReceiver screenReceiver;
+    /** 休眠守夜线程引用：stop 时 interrupt + join，避免快速 stop→start 叠出两个。 */
+    private static volatile Thread wakeSleeperThread;
+    /** 定时缓存清理线程是否已在跑：避免每次 boot/自动重启都叠一条线程。 */
+    private static volatile boolean autocleanRunning;
 
     private final AtomicBoolean stopping = new AtomicBoolean(false);
     /** 重启一次只跑一条线：以前两次 restart 挨着来，两个进程会抢同一个端口。 */
@@ -133,7 +143,9 @@ public class GatewayService extends Service {
     // ------------------------------------------------------------------
 
     static int gatewayPort(Context ctx) {
-        return Prefs.port(ctx);
+        int p = Prefs.port(ctx);
+        // 端口下限校验：<1024 是特权端口，普通 App 绑定会 EACCES 空转；回退默认端口。
+        return p < 1024 ? Prefs.DEFAULT_PORT : p;
     }
 
     static int webPort(Context ctx) {
@@ -178,19 +190,27 @@ public class GatewayService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        lastNotifAlive = null;
-        startForeground(NOTIF_ID, notification(this, "Magpie", "正在启动网关…",
-                FOREGROUND_FLAGS));
+        // startForeground 每次都要求带一个通知，但绝不能无脑写「正在启动网关…」：
+        // 服务本来就活着、内核也在跑时，那样会把已经显示「运行中」的通知打回启动文案，
+        // 而下面的纠正分支若因 process 引用过期 / starting 残留没执行，就永久卡在「正在启动」。
+        // 所以这里按「当前真实状态」决定文案，并起一个对账线程兜底。
+        int st = startState();
+        startForeground(NOTIF_ID, stateNotification(this, st));
+        lastPostedState = st;
+        startNotifTicker();
+
         if (intent != null && ACTION_RESTART.equals(intent.getAction())) {
             restart();
             return START_STICKY;
         }
         synchronized (LOCK) {
             if (process != null && process.isAlive()) {
-                // onStartCommand 每次都会先刷一次“正在启动网关…”。如果服务本来
-                // 已经在跑，这里必须立即纠正通知，否则 Activity 不打开时它会一直
-                // 停在启动文案。
-                syncNotification(this, true);
+                postState(this, ST_RUNNING);
+                return START_STICKY;
+            }
+            // 端口已经在监听 = 内核确实在跑（可能是上一个实例的进程，或服务被系统重建但内核还在）。
+            // 别再起第二个（会抢 3425 又退出），直接把通知端正。
+            if (st == ST_RUNNING) {
                 return START_STICKY;
             }
             if (starting) {
@@ -243,10 +263,24 @@ public class GatewayService extends Service {
 
     private void boot() {
         try {
+            // 后台线程里先探端口：服务被系统重建但旧内核还在监听时，跳过重复启动并把通知端正
+            // （这是「不在主线程 portOpen」的替代，见 #41）。
+            if (portOpen(Prefs.browserHost(this), webPort(this))) {
+                synchronized (LOCK) {
+                    ready = true;
+                    starting = false;
+                }
+                postState(this, ST_RUNNING);
+                appendLog("网关已在运行，跳过重复启动");
+                return;
+            }
             patchPlugins(this);
             File bin = ensureBinary(this);
-            quietOwnUpdater(bin);
             startProcess(this, bin);
+            // 关闭 magpie 自带更新后置到后台：两次 execQuiet 各可等 30s，别拖住首启（见 #48）。
+            Thread q = new Thread(() -> quietOwnUpdater(bin), "magpie-quiet-updater");
+            q.setDaemon(true);
+            q.start();
         } catch (Exception e) {
             Log.e(TAG, "boot failed", e);
             synchronized (LOCK) {
@@ -306,12 +340,29 @@ public class GatewayService extends Service {
         }, "execQuiet-drain");
         drain.setDaemon(true);
         drain.start();
+        boolean finished = false;
         try {
-            p.waitFor(30, java.util.concurrent.TimeUnit.SECONDS);
+            finished = p.waitFor(30, java.util.concurrent.TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
-        p.destroy();
+        if (!finished) {
+            p.destroy(); // 超时：强制收尾，避免首启被卡死的子进程拖住
+        }
+        // 等 drain 把剩余输出读完（否则线程泄漏），再看退出码
+        try {
+            drain.join(1000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        try {
+            int code = p.exitValue();
+            if (code != 0) {
+                appendLog("execQuiet " + args[0] + " 退出码 " + code);
+            }
+        } catch (IllegalThreadStateException ignored) {
+            // 还没退出（极少见），忽略
+        }
     }
 
     private void startProcess(Context ctx, File bin) throws IOException {
@@ -386,14 +437,22 @@ public class GatewayService extends Service {
         // 诊断端口跟着内核走：内核在，端口就在（AI 排查用，见 DiagServer 注释）
         DiagServer.ensure(ctx);
 
-        // 定时缓存清理：到点了静默清一轮（不弹 UI，日志里记一条）
-        new Thread(() -> {
-            try {
-                CacheCleaner.autoCleanIfDue(ctx);
-            } catch (Exception e) {
-                Log.w(TAG, "auto clean: " + e.getMessage());
-            }
-        }, "magpie-autoclean").start();
+        // 定时缓存清理：到点了静默清一轮（不弹 UI，日志里记一条）。加「已在跑」守卫 + daemon，
+        // 避免每次 boot/自动重启都叠一条线程。
+        if (!autocleanRunning) {
+            autocleanRunning = true;
+            Thread ac = new Thread(() -> {
+                try {
+                    CacheCleaner.autoCleanIfDue(ctx);
+                } catch (Exception e) {
+                    Log.w(TAG, "auto clean: " + e.getMessage());
+                } finally {
+                    autocleanRunning = false;
+                }
+            }, "magpie-autoclean");
+            ac.setDaemon(true);
+            ac.start();
+        }
 
         acquireWakeLock(ctx);
         startWakeSleeper(ctx);
@@ -420,6 +479,8 @@ public class GatewayService extends Service {
             String line;
             while ((line = r.readLine()) != null) {
                 lastActivityAt = System.currentTimeMillis();
+                // 有新请求/活动时，若息屏省电把唤醒锁放了，这里补回（补齐原来只能等亮屏的死代码）
+                ensureWakeLockForActivity(ctx);
                 appendLog(line);
                 Log.i(TAG, line);
             }
@@ -514,7 +575,7 @@ public class GatewayService extends Service {
             }
             restarting = true;
         }
-        new Thread(() -> {
+        Thread rt = new Thread(() -> {
             try {
                 stopping.set(true);
                 killProcess();
@@ -528,7 +589,9 @@ public class GatewayService extends Service {
             } finally {
                 restarting = false;
             }
-        }, "magpie-restart").start();
+        }, "magpie-restart");
+        rt.setDaemon(true);
+        rt.start();
     }
 
     /** 结束当前 magpie 进程，等它真的退出（最多 5s），不行就强行结束。 */
@@ -572,16 +635,26 @@ public class GatewayService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        synchronized (LOCK) {
-            stopping.set(true);
+        // 停掉通知对账线程：只有真正销毁服务才结束它，restart 不会走到这里。
+        notifTickerRunning = false;
+        Thread nt = notifThread;
+        if (nt != null) {
+            nt.interrupt();
         }
         Process p;
         synchronized (LOCK) {
+            stopping.set(true);
+            // 复位状态：服务被系统销毁再重建（同一个 App 进程内）时，别让旧的
+            // starting/process 残留把新实例堵在「正在启动」的早退分支上。
+            starting = false;
             p = process;
+            process = null;
+            ready = false;
         }
         if (p != null && p.isAlive()) {
             p.destroy();
         }
+        DiagServer.stop();
         LocalProxy.stop();
         stopWakeSleeper(this);
         releaseWakeLock();
@@ -993,8 +1066,20 @@ public class GatewayService extends Service {
             out = out + p.helper;
         }
         try {
-            try (FileOutputStream o = new FileOutputStream(f)) {
+            File parent = f.getParentFile();
+            // 先备份原文件（.bak），再写临时文件、最后 rename 原子替换：崩溃也不会写坏 methods.mjs。
+            File bak = new File(parent, f.getName() + ".bak");
+            try (FileOutputStream bo = new FileOutputStream(bak)) {
+                bo.write(src.getBytes(StandardCharsets.UTF_8));
+            }
+            File tmp = new File(parent, f.getName() + ".magpie-tmp");
+            try (FileOutputStream o = new FileOutputStream(tmp)) {
                 o.write(out.getBytes(StandardCharsets.UTF_8));
+            }
+            if (!tmp.renameTo(f)) {
+                // rename 失败（极少见）：保留 .bak 与原文件，报错，不留半截文件
+                tmp.delete();
+                throw new IOException("临时文件 rename 失败");
             }
             appendLog("插件补丁已写入：" + p.id);
         } catch (IOException e) {
@@ -1160,12 +1245,23 @@ public class GatewayService extends Service {
             }
         }, "magpie-wake-sleeper");
         t.setDaemon(true);
+        wakeSleeperThread = t;
         t.start();
         appendLog("息屏省电已启用：闲置 " + Prefs.wakeSaverMinutes(ctx) + " 分钟后释放唤醒锁");
     }
 
     private static void stopWakeSleeper(Context ctx) {
         sleeperRunning = false;
+        Thread t = wakeSleeperThread;
+        wakeSleeperThread = null;
+        if (t != null) {
+            t.interrupt(); // 让守夜线程立刻从 sleep 醒来退出
+            try {
+                t.join(1000); // 等它真退出，避免快速 stop→start 叠出两个守夜线程
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
         if (screenReceiver != null) {
             try {
                 ctx.unregisterReceiver(screenReceiver);
@@ -1228,58 +1324,112 @@ public class GatewayService extends Service {
     }
 
     private void notifyReady(Context ctx) {
-        lastNotifAlive = true;
-        NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
-        if (nm != null) {
-            // 地址固定写回环：bindHost() 在局域网模式下是 0.0.0.0，那是监听地址，
-            // 不是能填进客户端的地址（用户看到 0.0.0.0:3425 会以为坏了）。
-            nm.notify(NOTIF_ID, notification(ctx, "Magpie 已就绪",
-                    "网关 http://" + Prefs.browserHost(ctx) + ":" + gatewayPort(ctx), FOREGROUND_FLAGS));
-        }
+        postState(ctx, ST_RUNNING);
     }
 
     private void notifyDown(Context ctx, int code) {
-        lastNotifAlive = false;
+        postState(ctx, ST_DOWN);
+    }
+
+    /** 按状态生成前台通知。 */
+    private static Notification stateNotification(Context ctx, int st) {
+        if (st == ST_RUNNING) {
+            return notification(ctx, "Magpie 运行中",
+                    "网关 http://" + Prefs.browserHost(ctx) + ":" + gatewayPort(ctx)
+                            + (Prefs.lan(ctx) ? " · 局域网共享已开" : ""), FOREGROUND_FLAGS);
+        }
+        if (st == ST_DOWN) {
+            return notification(ctx, "Magpie 正在确认网关状态", "网关进程未运行", FOREGROUND_FLAGS);
+        }
+        return notification(ctx, "Magpie 正在启动网关…", "正在拉起内核，请稍候", FOREGROUND_FLAGS);
+    }
+
+    /** 去重地更新前台通知。状态没变就不重发（notify 有系统频控）。 */
+    private static void postState(Context ctx, int st) {
+        if (st == lastPostedState) {
+            return;
+        }
+        lastPostedState = st;
         NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm != null) {
-            nm.notify(NOTIF_ID, notification(ctx, "Magpie 正在恢复网关",
-                    code < 0 ? "网关进程结束" : "上次退出码 " + code, FOREGROUND_FLAGS));
+            nm.notify(NOTIF_ID, stateNotification(ctx, st));
         }
     }
 
     /**
-     * 把前台通知与网关真实状态对齐。
-     *
-     * <p>为什么这里每次都直接发、不做「状态没变就跳过」的去重：
-     * startForeground 每次都会把文案重置成「正在启动网关…」，而
-     * lastNotifAlive 只是「最后一次 sync 的目标状态」，不是通知栏里
-     * 实际显示的内容。系统重投递服务 Intent 时，通知被 startForeground
-     * 刷回启动文案，但 lastNotifAlive 还停留在「运行中」——再调
-     * syncNotification(true) 会因为「状态没变」直接 return，于是通知
-     * 就一直停在「正在启动网关…」。同 NOTIF_ID 重复发只会覆盖，没有副作用，
-     * 所以这里一律直接发。
+     * 兼容旧调用（MainActivity 通知点击）。按真实端口状态对齐通知，
+     * 不再只看 process.isAlive() —— 那正是「网关在跑但通知卡启动」的老坑。
      */
-    static void syncNotification(Context ctx, boolean alive) {
-        // 去重：状态没翻转就不重发（notify 有系统频控）。
-        Boolean last = lastNotifAlive;
-        if (last != null && last == alive) {
+    static void syncNotification(Context ctx, boolean aliveIgnored) {
+        // 调用来自 UI 线程：不在这里 portOpen（500ms connect 会卡主线程）。用进程/ready 快判，
+        // 真实端口状态由后台对账线程校正（最多 7s）。
+        boolean serving = isAlive() || ready;
+        postState(ctx, serving ? ST_RUNNING : ST_DOWN);
+    }
+
+    /** onStartCommand 用：不在主线程探测端口（500ms connect 会卡主线程），只用快速状态；
+     *  真实端口状态由后台对账线程 7s 内校正，boot() 进后台前也会再查一次端口防重复启动。 */
+    private int startState() {
+        return ready ? ST_RUNNING : ST_STARTING;
+    }
+
+    /** 对账线程用：综合 ready / 端口 / 进程，给出真实状态。 */
+    private int effectiveState() {
+        if (isServing()) {
+            return ST_RUNNING;
+        }
+        synchronized (LOCK) {
+            if (starting || (process != null && process.isAlive())) {
+                return ST_STARTING;
+            }
+        }
+        return ST_DOWN;
+    }
+
+    /** 网关是否真的在服务：ready 标记，或网页端口本机可连。 */
+    private boolean isServing() {
+        if (ready) {
+            return true;
+        }
+        try {
+            return portOpen(Prefs.browserHost(this), webPort(this));
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * 起一个「通知对账」后台线程：每 7 秒按真实端口状态校正通知。
+     *
+     * <p>这是治「通知卡在正在启动网关」的兜底：不管哪条路径把通知重置成了启动文案
+     * （startForeground 重发、服务被系统重建、process 引用过期、starting 残留…），
+     * 只要网关其实在监听，最多 7 秒后就会自愈成「运行中」。
+     */
+    private void startNotifTicker() {
+        if (notifTickerRunning) {
             return;
         }
-        lastNotifAlive = alive;
-        if (alive) {
-            NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
-            if (nm != null) {
-                nm.notify(NOTIF_ID, notification(ctx, "Magpie 运行中",
-                        "网关 http://" + Prefs.browserHost(ctx) + ":" + gatewayPort(ctx)
-                                + (Prefs.lan(ctx) ? " · 局域网共享已开" : ""), FOREGROUND_FLAGS));
+        notifTickerRunning = true;
+        Thread t = new Thread(() -> {
+            while (notifTickerRunning) {
+                try {
+                    postState(GatewayService.this, effectiveState());
+                } catch (Exception ignored) {
+                }
+                sleep(7000);
             }
-        } else {
-            NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
-            if (nm != null) {
-                nm.notify(NOTIF_ID, notification(ctx, "Magpie 正在确认网关状态",
-                        "网关进程未运行", FOREGROUND_FLAGS));
+            // 退出时把引用清空，允许后续（服务重建）再启动一个对账线程。
+            // 循环条件用独立的 notifTickerRunning，不看 stopping：restart 期间
+            // stopping 会 true→false，若拿它当条件线程会被误杀且永不再起。
+            synchronized (LOCK) {
+                if (notifThread == Thread.currentThread()) {
+                    notifThread = null;
+                }
             }
-        }
+        }, "magpie-notif");
+        t.setDaemon(true);
+        notifThread = t;
+        t.start();
     }
 
     static void postNotice(Context ctx, String title, String body) {

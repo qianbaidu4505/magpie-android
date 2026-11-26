@@ -83,6 +83,30 @@ public final class LanInfo {
         return ips.isEmpty() ? "" : ips.get(0);
     }
 
+    /** 异步结果回调（在主线程被调用）。 */
+    public interface OnResult<T> {
+        void onResult(T value);
+    }
+
+    /** 后台枚举局域网地址，结果 post 回主线程（点击回调里别再在主线程遍历网卡）。 */
+    public static void localIpsAsync(final OnResult<List<String>> cb) {
+        new Thread(() -> {
+            final List<String> r = localIps();
+            new android.os.Handler(android.os.Looper.getMainLooper())
+                    .post(() -> cb.onResult(r));
+        }, "lan-localips").start();
+    }
+
+    /** 后台读局域网密钥（磁盘 IO），结果 post 回主线程。 */
+    public static void lanSecretAsync(final Context ctx, final OnResult<String> cb) {
+        final Context app = ctx.getApplicationContext();
+        new Thread(() -> {
+            final String r = lanSecret(app);
+            new android.os.Handler(android.os.Looper.getMainLooper())
+                    .post(() -> cb.onResult(r));
+        }, "lan-secret").start();
+    }
+
     /**
      * 共享用的网关密钥明文。共享没开、密钥被停用或已撤销时返回空串。
      */

@@ -91,10 +91,13 @@ final class PartSheet {
         body.addView(loading);
         root.addView(body);
 
+        // 弹窗关掉 / Activity 销毁后就不再往已移除的视图里塞东西。
+        final boolean[] cancelled = {false};
         AlertDialog dlg = new AlertDialog.Builder(act)
                 .setView(scroll)
                 .setPositiveButton("关闭", null)
                 .create();
+        dlg.setOnDismissListener(d -> cancelled[0] = true);
         try {
             if (dlg.getWindow() != null) {
                 dlg.getWindow().setBackgroundDrawable(ui.dialogBg());
@@ -103,12 +106,19 @@ final class PartSheet {
         }
         dlg.show();
 
-        // 后台去捞请求体
+        // 后台去捞请求体（守护线程：Activity 先走也不会拖住进程）
         final long routeId = route.optLong("id", 0);
         final String blockTitle = (item == null || item.isEmpty()) ? title : item;
-        new Thread(() -> {
+        Thread th = new Thread(() -> {
             String text = fetch(act, routeId, kind, item);
+            if (cancelled[0] || act.isDestroyed()) {
+                return;
+            }
             act.runOnUiThread(() -> {
+                // 回调时再判一次：弹窗已关 / Activity 已销毁 / 视图已不在窗口上，都别碰 View
+                if (cancelled[0] || act.isDestroyed() || !body.isAttachedToWindow()) {
+                    return;
+                }
                 body.removeAllViews();
                 if (text == null) {
                     TextView t2 = ui.text("原文已经不在了：magpie 只在内存里保留最近 10 个请求。",
@@ -121,7 +131,9 @@ final class PartSheet {
                 }
                 body.addView(codeBlock(act, ui, blockTitle, text));
             });
-        }, "magpie-part").start();
+        }, "magpie-part");
+        th.setDaemon(true);
+        th.start();
     }
 
     /** 从 requestBody 里把对应那一段捞出来。 */

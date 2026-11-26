@@ -27,6 +27,8 @@ abstract class NativePage {
     private final TextView refreshHint;
 
     volatile boolean loading;
+    /** 后台真正在跑着的加载：onDetach 不清它，避免快速回挂时并发第二份 load。 */
+    private volatile boolean inFlight;
     long lastLoadAt;
 
     /** 页面上现在挂的是「网关正在启动」而不是内容，刷 spinner 没意义。 */
@@ -90,6 +92,10 @@ abstract class NativePage {
             host.post(() -> host.cancel(pendingRecheck));
             pendingRecheck = null;
         }
+        // 注意：这里只清 loading（让下拉圈收掉），但**不清 inFlight** ——
+        // onDetach 时后台 load() 可能还在跑，清掉它会让快速回挂时又起一份
+        // load（并发两份、数据错乱）。让在飞的 load 走自己的 done()/failed()
+        // 收尾即可（所有 load 路径都会调 done）。
         loading = false;
         if (layout != null) {
             layout.finishRefresh();
@@ -145,13 +151,14 @@ abstract class NativePage {
     // ------------------------------------------------------------------
 
     void refresh(boolean force) {
-        if (loading) {
+        if (loading || inFlight) {
             return;
         }
         if (!force && System.currentTimeMillis() - lastLoadAt < 8000) {
             return;
         }
         loading = true;
+        inFlight = true;
         lastLoadAt = System.currentTimeMillis();
         host.post(() -> {
             // 空页面直接上「正在读取」大字，不要再叠一条小提示；
@@ -168,9 +175,15 @@ abstract class NativePage {
             } catch (Throwable t) {
                 final String msg = t.getMessage() == null ? t.toString() : t.getMessage();
                 host.post(() -> {
+                    inFlight = false;
                     loading = false;
                     headerSpinner(false);
                     failed("读取失败：" + msg);
+                    // 异常分支也必须收掉下拉圈：否则 PullToRefresh 的
+                    // refreshing 一直是 true，后续下拉全被拒，看着像卡死。
+                    if (layout != null) {
+                        layout.finishRefresh();
+                    }
                 });
             }
         });
@@ -204,6 +217,7 @@ abstract class NativePage {
     /** 后台任务收尾：一定要调用，否则页面会一直卡在加载态。 */
     void done() {
         host.post(() -> {
+            inFlight = false;
             loading = false;
             headerSpinner(false);
             if (layout != null) {
@@ -345,6 +359,7 @@ abstract class NativePage {
 
     /** 读不到时：原因 + 重试 + 打开网页兜底。 */
     void failed(String why) {
+        inFlight = false;
         LinearLayout target = renderTarget();
         if (target == null) {
             return;

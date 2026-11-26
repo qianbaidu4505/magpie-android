@@ -427,9 +427,13 @@ public final class Updater {
         step.status("下载 " + rel.assetName + "（" + (rel.size > 0 ? mb(rel.size) : "未知大小") + "）…");
         download(ctx, rel, part, step);
 
-        // 校验
+        // 校验：源必须提供 SHA-256，缺了就拒绝安装（不能静默只比大小，否则二进制可被替换）
         String sum = sha256(part);
-        if (rel.sha256.length() > 0 && !rel.sha256.equalsIgnoreCase(sum)) {
+        if (rel.sha256 == null || rel.sha256.length() == 0) {
+            part.delete();
+            throw new IOException("发布源未提供 SHA-256，无法校验完整性，已拒绝安装（可换源或稍后重试）");
+        }
+        if (!rel.sha256.equalsIgnoreCase(sum)) {
             part.delete();
             throw new IOException("SHA-256 不对：期望 " + rel.sha256.substring(0, 16) + "…，实际 "
                     + sum.substring(0, 16) + "…（文件已删除，重试一次）");

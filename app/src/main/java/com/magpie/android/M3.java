@@ -203,12 +203,12 @@ final class M3 {
     };
 
     /**
-     * 默认主题：玻璃（也就是改动之前的样子）。
+     * 默认主题：玻璃（也就是改动之前的样子，THEMES[0]）。
      *
-     * <p>老用户升级上来不该被换皮，所以 THEMES 里虽然把「原版」排在第一位
-     * （方便一眼看到最朴素的那个），默认值仍然指回玻璃。
+     * <p>THEMES 首位就是「玻璃」，这里与之一致；老用户升级上来不会被换皮。
+     * （2026-11-26 修正：之前误写成 1，全新安装/非法值会落到第二位「原版」。）
      */
-    static final int DEFAULT_THEME = 1;
+    static final int DEFAULT_THEME = 0;
 
     /** 当前主题下标，越界退回默认那套。 */
     static int themeIndex(Context ctx) {

@@ -12,7 +12,7 @@
 
     <string name="settings_title">设置</string>
     <string name="settings_gateway_port">网关端口</string>
-    <string name="settings_gateway_port_hint">3425 是 magpie 的默认值</string>
+    <string name="settings_gateway_port_hint">3425 是 magpie 的默认值；端口需 ≥1024（小于 1024 为系统保留，会回退默认）</string>
     <string name="settings_lan">允许局域网访问</string>
     <string name="settings_lan_hint">同一 Wi-Fi 下的其他设备可以连上这台手机的网关</string>
     <string name="settings_update_feed">更新源</string>

@@ -134,11 +134,12 @@ final class DiagnosticsPack {
         File sd = new File("/sdcard/Download", name);
         if (canWrite(sd.getParentFile())) {
             try {
-                java.nio.file.Files.copy(priv.toPath(), sd.toPath(),
-                        java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                // 用流式拷贝代替 java.nio.file.Files(API 26)：minSdk 24 上该方法在 7.x 会抛 Error，
+                // 且 catch(Exception) 兜不住。这里 catch Throwable 一并兜底。
+                copyFile(priv, sd);
                 priv.delete();
                 return new DiagResult(sd, "公共下载目录（文件管理器 → Download）");
-            } catch (Exception ignored) {
+            } catch (Throwable ignored) {
             }
         }
         // ③ 兜底：留在私有目录，弹窗显示绝对路径
@@ -159,6 +160,18 @@ final class DiagnosticsPack {
             return false;
         } catch (Exception e) {
             return false;
+        }
+    }
+
+    /** 流式拷贝文件（不依赖 java.nio.file.Files，minSdk 24 可用）。 */
+    private static void copyFile(File src, File dst) throws java.io.IOException {
+        try (InputStream in = new FileInputStream(src);
+             java.io.OutputStream out = new FileOutputStream(dst)) {
+            byte[] buf = new byte[1 << 16];
+            int n;
+            while ((n = in.read(buf)) != -1) {
+                out.write(buf, 0, n);
+            }
         }
     }
 

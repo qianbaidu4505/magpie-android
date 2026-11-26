@@ -67,7 +67,8 @@ final class MagpieApi {
         boolean reading;
 
         boolean ok() {
-            return error == null && code == 200 && body != null;
+            // 截断的响应 body 是残缺串，解析会失败：当成失败走 why() 提示，别让调用方进成功分支后拿到 null。
+            return error == null && code == 200 && body != null && !truncated;
         }
 
         JSONObject json() {
@@ -218,12 +219,17 @@ final class MagpieApi {
             if (in != null) {
                 ByteArrayOutputStream buf = new ByteArrayOutputStream(1 << 16);
                 r.truncated = readInto(in, buf);
-                r.body = new String(buf.toByteArray(), StandardCharsets.UTF_8);
+                // 直接从缓冲解出字符串，省掉 toByteArray() 的那份整块拷贝（峰值内存减半）。
+                r.body = buf.toString(StandardCharsets.UTF_8.name());
             } else {
                 r.body = "";
             }
-        } catch (Exception e) {
-            r.error = message(e);
+        } catch (Throwable t) {
+            // 兜住 OOM 等 Error：大响应（history 一天可达 17MB）解析时可能抛 OutOfMemoryError，
+            // 之前只 catch(Exception) 接不住会让整页崩掉。这里转成一句可读错误。
+            r.error = t instanceof OutOfMemoryError
+                    ? "内容太大，内存不足（可减少 history 天数或稍后重试）"
+                    : message(t);
             Log.w(TAG, method + " " + path + " 失败: " + r.error);
         } finally {
             if (c != null) {
@@ -250,7 +256,7 @@ final class MagpieApi {
         }
     }
 
-    private static String message(Exception e) {
+    private static String message(Throwable e) {
         String m = e.getMessage();
         if (m == null || m.trim().isEmpty()) {
             m = e.getClass().getSimpleName();

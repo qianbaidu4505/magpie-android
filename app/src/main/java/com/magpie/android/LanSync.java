@@ -25,6 +25,18 @@ final class LanSync {
 
     private static final String TAG = "MagpieLan";
 
+    /** 串行执行器：所有对 magpie 的局域网写请求都在这一条线程里排队，避免快速 on→off 乱序。 */
+    private static final java.util.concurrent.ScheduledExecutorService SERIAL =
+            java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "magpie-lan-set");
+                t.setDaemon(true);
+                return t;
+            });
+    /** 最近一次想要的开关值（去抖：同一时刻多次切换只发最后一次）。 */
+    private static volatile boolean latest;
+    /** 是否已有一个待发的去抖任务。 */
+    private static volatile boolean pending;
+
     private LanSync() {
     }
 
@@ -53,15 +65,31 @@ final class LanSync {
      */
     static void set(final Context ctx, final boolean on) {
         Prefs.setLan(ctx, on);
-        new Thread(() -> {
-            MagpieApi.Result r = MagpieApi.post(ctx, "/api/settings/lan",
-                    "{\"on\":" + on + ",\"newKey\":false}", MagpieApi.WRITE_MS);
-            if (!r.ok()) {
-                Log.w(TAG, "同步 magpie 的局域网开关失败: " + r.why());
-            } else {
-                Log.i(TAG, "已同步 magpie 局域网共享 = " + on);
+        latest = on;
+        synchronized (LanSync.class) {
+            if (pending) {
+                return; // 已有一次待发：同刻多次切换只发最后一次
             }
-        }, "magpie-lan-set").start();
+            pending = true;
+        }
+        final Context app = ctx.getApplicationContext();
+        SERIAL.schedule(() -> {
+            synchronized (LanSync.class) {
+                pending = false;
+            }
+            final boolean want = latest;
+            try {
+                MagpieApi.Result r = MagpieApi.post(app, "/api/settings/lan",
+                        "{\"on\":" + want + ",\"newKey\":false}", MagpieApi.WRITE_MS);
+                if (!r.ok()) {
+                    Log.w(TAG, "同步 magpie 的局域网开关失败: " + r.why());
+                } else {
+                    Log.i(TAG, "已同步 magpie 局域网共享 = " + want);
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "同步 magpie 局域网开关异常: " + e.getMessage());
+            }
+        }, 150, java.util.concurrent.TimeUnit.MILLISECONDS);
     }
 
     /**
@@ -72,15 +100,17 @@ final class LanSync {
      */
     static void pushIfNeeded(final Context ctx) {
         final boolean want = Prefs.lan(ctx);
-        new Thread(() -> {
-            Boolean now = current(ctx);
+        final Context app = ctx.getApplicationContext();
+        // 走同一条串行执行器：与用户拨开关的写请求排队，避免相互覆盖/乱序。
+        SERIAL.execute(() -> {
+            Boolean now = current(app);
             if (now == null || now == want) {
                 return;
             }
-            MagpieApi.Result r = MagpieApi.post(ctx, "/api/settings/lan",
+            MagpieApi.Result r = MagpieApi.post(app, "/api/settings/lan",
                     "{\"on\":" + want + ",\"newKey\":false}", MagpieApi.WRITE_MS);
             Log.i(TAG, "网关就绪后对齐局域网开关 " + now + " → " + want
                     + (r.ok() ? " 成功" : " 失败：" + r.why()));
-        }, "magpie-lan-push").start();
+        });
     }
 }

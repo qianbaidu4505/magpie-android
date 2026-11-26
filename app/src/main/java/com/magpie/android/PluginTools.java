@@ -514,11 +514,33 @@ final class PluginTools {
                     continue;
                 }
                 name = name.replaceFirst("^\\./", "");
-                if (name.startsWith("/")) {
-                    name = name.substring(1);
-                }
+                // 防路径穿越：拒绝绝对路径、盘符、内嵌 NUL；规范化后必须仍在 destDir 内。
+                boolean unsafe = name.startsWith("/") || name.matches("^[A-Za-z]:.*")
+                        || name.indexOf('\0') >= 0;
                 File out = new File(destDir, name);
-                if (type == '5') {
+                if (!unsafe) {
+                    try {
+                        String base = destDir.getCanonicalPath();
+                        String target = out.getCanonicalPath();
+                        if (!target.equals(base) && !target.startsWith(base + java.io.File.separator)) {
+                            unsafe = true;
+                        }
+                    } catch (java.io.IOException e) {
+                        unsafe = true;
+                    }
+                }
+                if (unsafe) {
+                    // 越界条目：不落盘，但必须把这条目的数据读掉，否则后面 header 会错位。
+                    long remaining = size;
+                    while (remaining > 0) {
+                        int want = (int) Math.min((long) buf.length, remaining);
+                        n = gz.read(buf, 0, want);
+                        if (n < 0) {
+                            return;
+                        }
+                        remaining -= n;
+                    }
+                } else if (type == '5') {
                     if (!out.isDirectory()) {
                         out.mkdirs();
                     }

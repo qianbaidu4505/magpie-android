@@ -29,6 +29,8 @@ final class ProviderIcons {
     private static final Map<String, String> BY_ICON = new HashMap<>();
     /** provider id / preset id → drawable 名。 */
     private static final Map<String, String> BY_ID = new HashMap<>();
+    /** drawable 名 → 资源 id 缓存：避免每次渲染都反射 getIdentifier（列表滚动掉帧）。 */
+    private static final Map<String, Integer> ID_CACHE = new HashMap<>();
 
     static {
         BY_ICON.put("workbuddy-color", "pv_workbuddy_color");
@@ -135,11 +137,24 @@ final class ProviderIcons {
         if (name == null) {
             return 0;
         }
-        try {
-            return ctx.getResources().getIdentifier(name, "drawable", ctx.getPackageName());
-        } catch (Exception e) {
-            return 0;
+        // 缓存 name → resId：列表滚动时不再每次都走 getIdentifier 反射查找（掉帧）。
+        Integer cached;
+        synchronized (ID_CACHE) {
+            cached = ID_CACHE.get(name);
         }
+        if (cached != null) {
+            return cached;
+        }
+        int rid;
+        try {
+            rid = ctx.getResources().getIdentifier(name, "drawable", ctx.getPackageName());
+        } catch (Exception e) {
+            rid = 0;
+        }
+        synchronized (ID_CACHE) {
+            ID_CACHE.put(name, rid);
+        }
+        return rid;
     }
 
     static int ofProvider(Context ctx, JSONObject p) {

@@ -477,23 +477,43 @@ public class SettingsActivity extends Activity {
 
     /** 关闭自身 App：结束 Activity 再杀掉进程，前台服务、通知、恢复循环一起停。 */
     /**
-     * 重启整个 App：拉起 NativeHome（带 CLEAR_TASK），然后杀掉自己。
+     * 重启整个 App：用 AlarmManager 定一个延迟 PendingIntent 冷启动 NativeHome，
+     * 然后结束自己并杀掉旧进程。
      *
-     * <p>先 startActivity 再杀进程，新进程会自己起网关服务，设置立刻生效。
+     * <p>原先「先 startActivity 再 postDelayed 杀进程」有竞态：新 Activity 在同一
+     * 进程里刚起来就被 killProcess 一起杀掉，表现为直接退出、没重启。改成闹钟在
+     * 进程被杀之后触发，冷启动一个全新实例，稳。
      */
     private void restartApp() {
         try {
             Intent i = new Intent(this, NativeHome.class);
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-            startActivity(i);
+            android.app.PendingIntent pi = android.app.PendingIntent.getActivity(
+                    this, 0, i,
+                    android.app.PendingIntent.FLAG_CANCEL_CURRENT
+                            | android.app.PendingIntent.FLAG_IMMUTABLE);
+            android.app.AlarmManager am =
+                    (android.app.AlarmManager) getSystemService(ALARM_SERVICE);
+            if (am != null) {
+                // 用 set（非 setExact）：不需要精确闹钟权限，500ms 后把新实例拉起来。
+                am.set(android.app.AlarmManager.RTC,
+                        System.currentTimeMillis() + 500, pi);
+            } else {
+                startActivity(i);
+            }
         } catch (Exception e) {
-            // 起不来就退回旧行为：关掉自己，让用户手动点
             android.util.Log.w("MagpieSettings", "重启 App 失败: " + e);
+            try {
+                Intent i = new Intent(this, NativeHome.class);
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                startActivity(i);
+            } catch (Exception ignored) {
+            }
         }
         setResult(RESULT_OK);
         finishAndRemoveTask();
-        // 给新 Activity 一点时间先起来，再杀旧进程
+        // 给闹钟留出被系统接收的时间，再杀旧进程（新实例由闹钟冷启动）
         new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(
-                () -> android.os.Process.killProcess(android.os.Process.myPid()), 400);
+                () -> android.os.Process.killProcess(android.os.Process.myPid()), 300);
     }
 }

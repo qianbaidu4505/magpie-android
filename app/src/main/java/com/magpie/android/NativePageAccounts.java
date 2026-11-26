@@ -76,11 +76,12 @@ final class NativePageAccounts extends NativePage {
             }
         }
         if (changed) {
-            // 收起后重画一次，保持回顶部的意图（refresh 里已经会重建列表）
+            // 收起后重画一次（refresh 走 rebuildKeepingScroll 会保留旧 scrollY）
             refresh(true);
-        } else {
-            scroll.post(() -> scroll.smoothScrollTo(0, 0));
         }
+        // 无论是否重建，最后都显式回顶：否则「收起并回顶」只收起、不回顶。
+        // 放在下一帧执行，兼容重建前/后两种时序，最终 scrollY 都是 0。
+        scroll.post(() -> scroll.scrollTo(0, 0));
     }
 
     @Override
@@ -518,17 +519,20 @@ final class NativePageAccounts extends NativePage {
         host.bg(() -> {
             MagpieApi.Result r = MagpieApi.providersFull(host);
             final MagpieApi.Result res = r;
+            final boolean ok = res.ok();
+            final String why = ok ? null : res.why();
+            // 大 JSON 在后台解析：70+ 供应商的模型表在主线程 parse 会卡顿/ANR。
+            final JSONObject parsed = ok ? res.json() : null;
             host.post(() -> {
-                if (!res.ok()) {
-                    toast("读不到模型列表：" + res.why());
+                if (!ok) {
+                    toast("读不到模型列表：" + why);
                     return;
                 }
-                JSONObject o = res.json();
-                if (o == null) {
+                if (parsed == null) {
                     toast("模型列表解析失败");
                     return;
                 }
-                buildAllModelsSheet(o);
+                buildAllModelsSheet(parsed);
             });
         });
     }

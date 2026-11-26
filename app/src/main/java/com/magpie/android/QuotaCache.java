@@ -61,6 +61,25 @@ final class QuotaCache {
             }
         }
         // 太久没出现过的清掉，免得删掉的账号一直挂在页面上
+        pruneDead(now);
+        return snapshot();
+    }
+
+    /** 当前合并结果，按 magpie 给过的顺序（LinkedHashMap 保持插入序）。
+     *  这里也做一次 TTL 清理：额度接口持续失败、长期没人调 merge 时，
+     *  已删账号/早已超过 TTL 的卡不会一直挂在页面上。 */
+    static synchronized JSONArray snapshot() {
+        pruneDead(System.currentTimeMillis());
+        JSONArray out = new JSONArray();
+        for (JSONObject q : CARDS.values()) {
+            out.put(q);
+        }
+        return out;
+    }
+
+    /** 清掉超过 TTL 没再出现在响应里的卡。
+     *  区分「本次未出现」仍在 TTL 内（保留，可能供应商还在读）与「超 TTL」（删，账号被删/一直失败）。 */
+    private static void pruneDead(long now) {
         List<String> dead = new ArrayList<>();
         for (Map.Entry<String, Long> e : SEEN.entrySet()) {
             if (now - e.getValue() > TTL) {
@@ -71,16 +90,6 @@ final class QuotaCache {
             CARDS.remove(k);
             SEEN.remove(k);
         }
-        return snapshot();
-    }
-
-    /** 当前合并结果，按 magpie 给过的顺序（LinkedHashMap 保持插入序）。 */
-    static synchronized JSONArray snapshot() {
-        JSONArray out = new JSONArray();
-        for (JSONObject q : CARDS.values()) {
-            out.put(q);
-        }
-        return out;
     }
 
     /** 只保留这一次响应里有的卡（用户手动「全部重读」时用）。 */

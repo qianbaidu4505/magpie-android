@@ -103,6 +103,8 @@ public class MainActivity extends Activity {
     private volatile boolean loaded;
     private volatile boolean polling;
     private volatile ValueCallback<Uri[]> fileCallback;
+    /** 文件选择器是否已经在前台：防止同时弹出两个 chooser 抢同一个回调。 */
+    private volatile boolean fileChooserActive;
     /** 重建 WebView 期间挡住重复回调，别一次死两个进程建出三个页面。 */
     private volatile boolean webRebuilding;
     /** Activity 不可见后，按设置延迟释放 WebView；不碰 GatewayService。 */
@@ -267,6 +269,11 @@ public class MainActivity extends Activity {
         super.onResume();
         appInBackground = false;
         ui.removeCallbacks(releaseWebTask);
+        // 回前台若页面还活着就重新起心跳（幂等：先撤再加，别叠两份）
+        ui.removeCallbacks(heartbeat);
+        if (loaded && web != null) {
+            ui.postDelayed(heartbeat, 15000);
+        }
         if (webReleased && web == null) {
             rebuildWeb(false);
             webReleased = false;
@@ -318,6 +325,8 @@ public class MainActivity extends Activity {
     protected void onStop() {
         super.onStop();
         appInBackground = true;
+        // 退后台收掉文件选择回调，别让 WebView/页面挂着等结果（否则泄漏/卡死）
+        clearFileCallback();
         ui.removeCallbacks(releaseWebTask);
         int minutes = Prefs.webReleaseMinutes(this);
         if (minutes > 0 && !isChangingConfigurations()) {
@@ -331,12 +340,14 @@ public class MainActivity extends Activity {
     protected void onDestroy() {
         ui.removeCallbacks(releaseWebTask);
         ui.removeCallbacks(heartbeat);
+        clearFileCallback();
+        destroyWeb();
         super.onDestroy();
     }
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
-        if (keyCode == KeyEvent.KEYCODE_BACK && web.canGoBack()) {
+        if (keyCode == KeyEvent.KEYCODE_BACK && web != null && web.canGoBack()) {
             web.goBack();
             return true;
         }
@@ -362,6 +373,7 @@ public class MainActivity extends Activity {
                 startGatewayAndWait();
             }
         } else if (requestCode == REQ_FILE) {
+            fileChooserActive = false;
             ValueCallback<Uri[]> cb = fileCallback;
             fileCallback = null;
             if (cb != null) {
@@ -392,11 +404,13 @@ public class MainActivity extends Activity {
         s.setSupportZoom(false);
         s.setBuiltInZoomControls(false);
         s.setDisplayZoomControls(false);
-        // 不设 setUseWideViewPort / setLoadWithOverviewMode：
-        // 它们会把 WebView 视口拉到 980px 的「宽视口」，覆盖 magpie 网页自己声明的
-        // <meta name="viewport" content="width=device-width">。宽视口下 CSS 宽度远大于
-        // 屏幕实际宽度，magpie 网页 @media(max-width:760px) 的手机适配全不命中，
-        // 弹窗/账号行/进度条全按桌面规格排版——全面屏（3200×1400）上尤其明显。
+        // 让网页自己的 <meta name="viewport" content="width=device-width"> 生效：
+        // useWideViewPort=true = 支持 viewport meta；loadWithOverviewMode=true = 按该宽度铺满屏幕。
+        // **不设**这两项时 WebView 退回默认宽视口（约 980px），magpie 网页
+        // @media(max-width:760px) 的手机适配不命中，就会出现「App 内是桌面版、底部 tab
+        // 挤成一行，浏览器打开却正常」——正是这里必须设的原因。（旧注释把因果写反了。）
+        s.setUseWideViewPort(true);
+        s.setLoadWithOverviewMode(true);
         s.setTextZoom(100);
 
         CookieManager cm = CookieManager.getInstance();
@@ -558,6 +572,12 @@ public class MainActivity extends Activity {
             @Override
             public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback,
                                              FileChooserParams params) {
+                if (fileChooserActive) {
+                    // 已经有一个选择器在前台：拒绝这次重复请求，避免两个 chooser 抢回调
+                    callback.onReceiveValue(null);
+                    return true;
+                }
+                fileChooserActive = true;
                 fileCallback = callback;
                 Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
                 intent.addCategory(Intent.CATEGORY_OPENABLE);
@@ -581,6 +601,7 @@ public class MainActivity extends Activity {
                     Log.w(TAG, "no file picker: " + e);
                     callback.onReceiveValue(null);
                     fileCallback = null;
+                    fileChooserActive = false;
                 }
                 return true;
             }
@@ -614,15 +635,45 @@ public class MainActivity extends Activity {
             return;
         }
         Log.i(TAG, "后台超时，释放 WebView；网关继续运行");
+        destroyWeb();
+        webReleased = true;
+    }
+
+    /** 彻底销毁当前 WebView 并置空（后台释放与 Activity 销毁共用，避免泄漏）。 */
+    private void destroyWeb() {
+        WebView w = web;
+        if (w == null) {
+            return;
+        }
         try {
-            ((ViewGroup) webCard).removeView(web);
-            web.setWebViewClient(null);
-            web.destroy();
+            ViewGroup parent = (ViewGroup) w.getParent();
+            if (parent != null) {
+                parent.removeView(w);
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            w.setWebViewClient(null);
+            w.setWebChromeClient(null);
+            w.stopLoading();
+            w.destroy();
         } catch (Exception e) {
-            Log.w(TAG, "释放后台 WebView 失败", e);
+            Log.w(TAG, "销毁 WebView 失败", e);
         }
         web = null;
-        webReleased = true;
+    }
+
+    /** 清掉挂起的文件选择回调（退后台/销毁时调用），否则页面/WebView 挂住不释放。 */
+    private void clearFileCallback() {
+        fileChooserActive = false;
+        ValueCallback<Uri[]> cb = fileCallback;
+        fileCallback = null;
+        if (cb != null) {
+            try {
+                cb.onReceiveValue(null);
+            } catch (Exception ignored) {
+            }
+        }
     }
 
 
@@ -765,10 +816,19 @@ public class MainActivity extends Activity {
     }
 
     private void openExternal(String url) {
+        // 安全：外部链接只当普通 ACTION_VIEW「查看」处理。禁止 intent: 伪协议
+        // 把任意 action/component/extras 透传给别的 App（intent-redirection）。
         try {
             Intent i = Intent.parseUri(url, Intent.URI_INTENT_SCHEME);
-            startActivity(i);
-            return;
+            if (i != null && (i.getAction() == null
+                    || Intent.ACTION_VIEW.equals(i.getAction()))) {
+                i.setAction(Intent.ACTION_VIEW);
+                i.setComponent(null);
+                i.setSelector(null);
+                i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(i);
+                return;
+            }
         } catch (Exception ignored) {
         }
         try {

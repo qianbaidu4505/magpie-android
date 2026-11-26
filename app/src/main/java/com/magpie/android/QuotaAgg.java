@@ -68,7 +68,8 @@ final class QuotaAgg {
         }
         // 数字在前，单位是后面的第一个词
         int i = 0;
-        while (i < t.length() && (Character.isDigit(t.charAt(i)) || t.charAt(i) == '.')) {
+        while (i < t.length() && (Character.isDigit(t.charAt(i))
+                || t.charAt(i) == '.' || t.charAt(i) == ',')) {
             i++;
         }
         if (i == 0) {
@@ -111,10 +112,12 @@ final class QuotaAgg {
                 continue;
             }
             String shared = NativeData.str(q, "sharedBalance", "");
+            String provider = NativeData.str(q, "provider", "");
+            // 去重键带 provider：不同供应商同 user/alias 或同名 shared 不能被误合并
             String dedupeKey = shared.isEmpty()
-                    ? "self:" + NativeData.str(q, "user", "") + "|"
+                    ? "self:" + provider + "|" + NativeData.str(q, "user", "") + "|"
                     + NativeData.str(q, "alias", "")
-                    : "shared:" + shared;
+                    : "shared:" + provider + "|" + shared;
             Map<String, Double> bucket = sums.get(m.unit);
             if (bucket == null) {
                 bucket = new LinkedHashMap<>();
@@ -176,9 +179,9 @@ final class QuotaAgg {
 
         // 每个账号取一个数：优先 balance 字段（"1710 credits"、"$4.18"），
         // 没有就走 windows[] 里最宽的那个窗口的剩余（limit - amount）。
-        // 按账号去重后直接相加 —— 不按单位分组（积分和 $ 混着加没意义），
-        // 也不按窗口名分组（名字各家起的都不一样）。
-        double sum = 0;
+        // 按单位分组累加：积分与各货币分开，绝不混加；同一账号(shared 去重)只算一次，
+        // 多积分池按账号取数累加。不按窗口名分组（名字各家起的不一样）。
+        Map<String, Double> sums = new LinkedHashMap<>();
         int counted = 0;
         java.util.Set<String> seen = new java.util.HashSet<>();
 
@@ -187,23 +190,27 @@ final class QuotaAgg {
             if (q == null || !NativeData.str(q, "error", "").isEmpty()) {
                 continue;
             }
+            String provider = NativeData.str(q, "provider", "");
             String user = NativeData.str(q, "user", "");
             String alias = NativeData.str(q, "alias", "");
             String shared = NativeData.str(q, "sharedBalance", "");
             String key = shared.isEmpty()
-                    ? user + "|" + alias
-                    : "shared:" + shared;
+                    ? provider + "|" + user + "|" + alias
+                    : provider + "|shared:" + shared;
 
             double v = -1;
+            String accUnit = "";
 
             // ① balance 字段优先
             Money m = parseBalance(NativeData.str(q, "balance", ""));
             if (m.ok) {
                 v = m.value;
+                accUnit = m.unit;
             } else {
                 // ② 退到窗口：挑「剩余最多」的那个窗口当这个账号的数
                 JSONArray arr = NativeData.arr(q, "windows");
                 double best = -1;
+                String bestUnit = "";
                 for (int j = 0; j < arr.length(); j++) {
                     JSONObject w = NativeData.at(arr, j);
                     if (w == null || NativeData.flag(w, "unlimited") || NativeData.flag(w, "text")) {
@@ -228,10 +235,12 @@ final class QuotaAgg {
                     double left = limit - amount;
                     if (left > best) {
                         best = left;
+                        bestUnit = "credits";
                     }
                 }
                 if (best >= 0) {
                     v = best;
+                    accUnit = bestUnit;
                 }
             }
 
@@ -239,7 +248,9 @@ final class QuotaAgg {
                 continue;
             }
             seen.add(key);
-            sum += v;
+            String g = groupKey(accUnit);
+            Double cur = sums.get(g);
+            sums.put(g, (cur == null ? 0 : cur) + v);
             counted++;
         }
 
@@ -247,8 +258,22 @@ final class QuotaAgg {
             return t;
         }
 
-        t.value = brief(sum);
-        StringBuilder note = new StringBuilder("剩余：").append(brief(sum));
+        // 主数字优先积分，没有积分就用第一种货币；其余各组列在后面，绝不混加。
+        String mainKey = sums.containsKey("credits") ? "credits" : sums.keySet().iterator().next();
+        double mainSum = sums.get(mainKey);
+        t.value = brief(mainSum);
+        StringBuilder note = new StringBuilder("剩余：").append(brief(mainSum));
+        for (Map.Entry<String, Double> ge : sums.entrySet()) {
+            if (ge.getKey().equals(mainKey)) {
+                continue;
+            }
+            note.append(" · ");
+            if ("credits".equals(ge.getKey())) {
+                note.append(brief(ge.getValue())).append(" 积分");
+            } else {
+                note.append(ge.getKey()).append(brief(ge.getValue()));
+            }
+        }
         // 非积分类窗口（令牌、$）单独提一句：它们是真实额度，但不属于「积分」
         int otherWin = 0;
         for (int i = 0; i < accounts.length(); i++) {
@@ -276,6 +301,22 @@ final class QuotaAgg {
         }
         t.note = note.toString();
         return t;
+    }
+
+    /** 归并单位：货币符号各自一组；积分（credits/积分/点数/空）统一记作 "credits"。 */
+    private static String groupKey(String unit) {
+        if (unit == null) {
+            return "credits";
+        }
+        String u = unit.trim();
+        if (u.equals("$") || u.equals("¥") || u.equals("￥") || u.equals("€")) {
+            return u;
+        }
+        String l = u.toLowerCase(Locale.US);
+        if (l.contains("credit") || l.contains("积分") || l.contains("点数") || u.isEmpty()) {
+            return "credits";
+        }
+        return u;
     }
 
     private static String fmt(double v) {

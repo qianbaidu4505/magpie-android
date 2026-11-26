@@ -37,6 +37,24 @@ final class LivePanel {
     /** 每次 trace 回来顺手转一份给别人（请求记录区要用同一批 routes）。 */
     private java.util.function.Consumer<JSONArray> forward;
 
+    /**
+     * 并发请求：同时显示最近若干条 route（网页那样），而不是只显示最后一条。
+     * 以前 apply() 只挑 id 最大的一条重画，多个 agent/会话并发时每来一条就整块
+     * 换成另一条 → 界面反复跳。现在按 route id 累积成列表、并列展示、可展开。
+     */
+    private static final int MAX_LIVE = 30;
+    private static final long DONE_TTL_MS = 20_000L;
+    private final java.util.LinkedHashMap<Long, Entry> entries = new java.util.LinkedHashMap<>();
+
+    private static final class Entry {
+        long id;
+        JSONObject route;
+        long lastSeen;
+        boolean done;
+        long doneAt;
+        boolean expanded;
+    }
+
     LivePanel(NativeHome host, Ui ui) {
         this.host = host;
         this.ui = ui;
@@ -143,41 +161,162 @@ final class LivePanel {
             setCounter(statRerouted, NativeData.num(totals, "rerouted"));
             setCounter(statErrors, NativeData.num(totals, "errors"));
         }
-
-        JSONObject newest = null;
+        long now = System.currentTimeMillis();
         if (routes != null) {
-            long best = -1;
             for (int i = 0; i < routes.length(); i++) {
                 JSONObject r = routes.optJSONObject(i);
                 if (r == null) {
                     continue;
                 }
                 long id = r.optLong("id", 0);
-                if (id >= best) {
-                    best = id;
-                    newest = r;
+                if (id <= 0) {
+                    continue;
+                }
+                Entry e = entries.get(id);
+                if (e == null) {
+                    e = new Entry();
+                    e.id = id;
+                    entries.put(id, e);
+                }
+                e.route = r;
+                e.lastSeen = now;
+                if (NativeData.flag(r, "done")) {
+                    e.done = true;
+                    e.doneAt = now;
+                } else {
+                    e.done = false;
                 }
             }
         }
-        if (newest == null) {
+        // 清掉完成已久（超过 TTL）的条目
+        java.util.Iterator<java.util.Map.Entry<Long, Entry>> it = entries.entrySet().iterator();
+        while (it.hasNext()) {
+            Entry e = it.next().getValue();
+            if (e.done && now - e.doneAt > DONE_TTL_MS) {
+                it.remove();
+            }
+        }
+        // 超量：先淘汰已完成的，其次淘汰最旧的
+        while (entries.size() > MAX_LIVE) {
+            Long victim = null;
+            for (java.util.Map.Entry<Long, Entry> en : entries.entrySet()) {
+                if (en.getValue().done) {
+                    victim = en.getKey();
+                    break;
+                }
+            }
+            if (victim == null) {
+                for (Long k : entries.keySet()) {
+                    victim = k;
+                    break;
+                }
+            }
+            entries.remove(victim);
+        }
+        syncBody();
+    }
+
+    /**
+     * 像 magpie 网页那样：左边列出当前并发的所有 agent（同一 agent+模型去重成一张源卡），
+     * 汇到右边一个 magpie，再往下展开「当前这次路由决定」选中的账号与候选。
+     * 不再每来一条请求就叠一个块（那会反复跳/重复）。
+     */
+    private void syncBody() {
+        if (entries.isEmpty()) {
             renderEmpty();
             return;
         }
-        renderRoute(newest);
+        java.util.List<Entry> list = new java.util.ArrayList<>(entries.values());
+        list.sort((a, b) -> Long.compare(b.id, a.id)); // 新的在上
+
+        // 去重出「当前有哪些 agent 在请求」（agent+模型 作为一张卡，最多 8 张）
+        java.util.LinkedHashMap<String, Entry> agents = new java.util.LinkedHashMap<>();
+        for (Entry e : list) {
+            String key = NativeData.str(e.route, "agent", "") + "|"
+                    + NativeData.str(e.route, "model", "");
+            if (!agents.containsKey(key)) {
+                agents.put(key, e);
+            }
+            if (agents.size() >= 8) {
+                break;
+            }
+        }
+
+        body.removeAllViews();
+        body.addView(sourcesRow(agents, list.get(0)));
+
+        // 当前决定 = 最新的、还在进行中的那条；都在跑就用最新的一条
+        Entry feat = null;
+        for (Entry e : list) {
+            if (!e.done) {
+                feat = e;
+                break;
+            }
+        }
+        if (feat == null) {
+            feat = list.get(0);
+        }
+        JSONObject route = feat.route;
+        JSONArray tries = NativeData.arr(route, "tries");
+        String answered = null;
+        if (tries.length() > 0) {
+            JSONObject last = tries.optJSONObject(tries.length() - 1);
+            if (last != null) {
+                answered = NativeData.str(last, "id", null);
+            }
+        }
+        boolean done = NativeData.flag(route, "done");
+        int status = NativeData.num(route, "status");
+        body.addView(connector(answered != null, done, status));
+        body.addView(orderList(route, answered, tries, done, status));
+        body.addView(excluded(route));
     }
 
-    private void renderEmpty() {
-        body.removeAllViews();
-        body.addView(nodes(null, null, null));
-        TextView t = ui.text("还没有请求", 12, M3.ON_SURFACE_VARIANT, false);
-        t.setGravity(Gravity.CENTER);
-        t.setPadding(0, ui.dp(16), 0, ui.dp(10));
-        body.addView(t);
+    /** 左侧：所有并发 agent 的小卡竖排；中间箭头；右侧：一个 magpie 卡。 */
+    private View sourcesRow(java.util.LinkedHashMap<String, Entry> agents, Entry newest) {
+        LinearLayout wrap = ui.column();
+        wrap.setPadding(ui.dp(16), ui.dp(2), ui.dp(16), ui.dp(2));
+
+        LinearLayout row = ui.row();
+        row.setGravity(Gravity.CENTER_VERTICAL);
+
+        LinearLayout left = ui.column();
+        int n = 0;
+        for (Entry e : agents.values()) {
+            String agent = NativeData.str(e.route, "agent", "");
+            String model = NativeData.str(e.route, "model", "");
+            String who = (agent == null || agent.isEmpty()) ? "等待请求" : NativeData.pretty(agent);
+            LinearLayout b = box(who, "你的 Agent",
+                    model.isEmpty() ? null : shortModel(model), false, false);
+            LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            if (n > 0) {
+                blp.topMargin = ui.dp(6);
+            }
+            left.addView(b, blp);
+            n++;
+        }
+        row.addView(left, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        TextView arrow = ui.text("\u2192", 14, M3.OUTLINE, false);
+        arrow.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(
+                ui.dp(26), ViewGroup.LayoutParams.WRAP_CONTENT);
+        alp.gravity = Gravity.CENTER_VERTICAL;
+        row.addView(arrow, alp);
+
+        JSONObject g = newest == null ? null : NativeData.obj(newest.route, "group");
+        String grpName = g == null ? "" : NativeData.str(g, "ref", NativeData.str(g, "name", ""));
+        LinearLayout magpie = box(Prefs.browserHost(host) + ":" + GatewayService.gatewayPort(host),
+                "magpie", grpName.isEmpty() ? null : grpName, true, false);
+        row.addView(magpie, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        wrap.addView(row, wrapLp());
+        return wrap;
     }
 
-    private void renderRoute(JSONObject route) {
-        body.removeAllViews();
-
+    /** 一条 route 的完整明细：agent→magpie 两框 + 连线 + 候选账号卡 + 被排除。 */
+    private void addDetail(LinearLayout parent, JSONObject route) {
         String agent = NativeData.str(route, "agent", "");
         String model = NativeData.str(route, "model", "");
         JSONObject group = NativeData.obj(route, "group");
@@ -190,14 +329,43 @@ final class LivePanel {
                 answered = NativeData.str(last, "id", null);
             }
         }
-
         boolean done = NativeData.flag(route, "done");
         int status = NativeData.num(route, "status");
 
-        body.addView(nodes(agent, model, group));
-        body.addView(connector(answered != null, done, status));
-        body.addView(orderList(route, answered, tries, done, status));
-        body.addView(excluded(route));
+        parent.addView(nodes(agent, model, group));
+        parent.addView(connector(answered != null, done, status));
+        parent.addView(orderList(route, answered, tries, done, status));
+        parent.addView(excluded(route));
+    }
+
+    /** 摘要行右侧的状态文字。 */
+    private String summaryText(JSONObject route) {
+        boolean done = NativeData.flag(route, "done");
+        int status = NativeData.num(route, "status");
+        if (!done) {
+            return "回答中…";
+        }
+        if (status >= 400) {
+            return "失败 " + status;
+        }
+        JSONArray tries = NativeData.arr(route, "tries");
+        double ms = 0;
+        if (tries.length() > 0) {
+            JSONObject t = tries.optJSONObject(tries.length() - 1);
+            if (t != null) {
+                ms = NativeData.dec(t, "ms");
+            }
+        }
+        return ms > 0 ? "已答 · " + NativeData.ms((long) ms) : "已答";
+    }
+
+    private void renderEmpty() {
+        body.removeAllViews();
+        body.addView(nodes(null, null, null));
+        TextView t = ui.text("还没有请求", 12, M3.ON_SURFACE_VARIANT, false);
+        t.setGravity(Gravity.CENTER);
+        t.setPadding(0, ui.dp(16), 0, ui.dp(10));
+        body.addView(t);
     }
 
     private View nodes(String agent, String model, JSONObject group) {

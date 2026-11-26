@@ -88,7 +88,12 @@ public class NativeHome extends Activity {
     private int tab = TAB_OVERVIEW;
 
     volatile boolean gatewayReady;
-    private boolean polling;
+    private volatile boolean polling;
+    /** pollGateway 的代际号：pause/destroy 递增使其失效，旧循环据此退出。 */
+    private volatile int pollGen;
+    /** 连续失败次数与下次允许重扫的时间（退避上限），防止网关起不来时每 2s 重扫。 */
+    private int pollFailCount;
+    private long pollRetryAt;
     private boolean resumed;
 
     private final List<TextView> tabViews = new ArrayList<>();
@@ -119,6 +124,28 @@ public class NativeHome extends Activity {
         }
     };
 
+    /**
+     * 启动后延迟执行的一次性任务（版本弹窗 / 保活引导 / 自动检查）。
+     * 存成字段是为了 onPause 能精确撤销；回调里再判 resumed/isFinishing/isDestroyed，
+     * 避免用户几秒内就退出后仍然弹框或拉起别的 Activity。
+     */
+    private final Runnable launchWhatsNew = () -> {
+        if (resumed && !isFinishing() && !isDestroyed()) WhatsNew.maybeShow(this);
+    };
+    private final Runnable launchBackgroundGuide = () -> {
+        if (resumed && !isFinishing() && !isDestroyed()) BackgroundGuide.maybeShowOnLaunch(this);
+    };
+    private final Runnable launchFreezeNudge = () -> {
+        if (resumed && !isFinishing() && !isDestroyed()) FreezeGuard.nudgeOnOpen(this);
+    };
+    private final Runnable launchAutoCheck = () -> {
+        if (resumed && !isFinishing() && !isDestroyed()) autoCheckUpdates();
+    };
+    private final Runnable launchShellCheck = () -> {
+        if (resumed && !isFinishing() && !isDestroyed())
+            ShellUpdateFlow.autoCheck(this, ShellUpdateFlow.m3(this, ui));
+    };
+
     // ------------------------------------------------------------------
     // 生命周期
     // ------------------------------------------------------------------
@@ -131,6 +158,11 @@ public class NativeHome extends Activity {
         // 不会闪白/闪黑（深色主题尤其明显）。
         ThemeSwitch.paintWindow(this);
         Prefs.webKey(this);
+        // 先量出导航条高度再建底栏：建底栏时要用真实 navHeight 算 margin。
+        // 原先先建底栏后 setupImmersive，此刻 navHeight 还是 0，底栏只离底
+        // 6dp、被系统导航/手势条盖住；之后才赋值也补不回 margin。
+        navHeight = barHeight("navigation_bar_height");
+        sNavHeight = navHeight;
         buildShell();
         setupImmersive();
         startGateway();
@@ -144,17 +176,13 @@ public class NativeHome extends Activity {
         }
         selectTab(tab, true);
 
-        // 版本更新弹窗：升级过来就弹一次（排在保活引导之前，用户最先看到）
-        uiHandler.postDelayed(() -> WhatsNew.maybeShow(this), 1200);
-
-        // 后台保活引导（通知权限 / 电池优化 / 厂商自启动）和两个自动检查
-        // 跟旧壳一致，只是延后一点，别和首屏渲染抢主线程
-        uiHandler.postDelayed(() -> BackgroundGuide.maybeShowOnLaunch(this), 2500);
-        // 小米系且没设「无限制」：发一条通知引导（不弹框、不挡用户看数据）
-        uiHandler.postDelayed(() -> FreezeGuard.nudgeOnOpen(this), 3200);
-        uiHandler.postDelayed(this::autoCheckUpdates, 4000);
-        uiHandler.postDelayed(() -> ShellUpdateFlow.autoCheck(this, ShellUpdateFlow.m3(this, ui)),
-                6000);
+        // 版本更新弹窗 / 保活引导 / 两个自动检查：都排成固定字段，退后台时能撤销；
+        // 回调里再判 resumed && !isFinishing()，避免已离开还弹框、拉 Activity。
+        uiHandler.postDelayed(launchWhatsNew, 1200);
+        uiHandler.postDelayed(launchBackgroundGuide, 2500);
+        uiHandler.postDelayed(launchFreezeNudge, 3200);
+        uiHandler.postDelayed(launchAutoCheck, 4000);
+        uiHandler.postDelayed(launchShellCheck, 6000);
 
         // 若这次重建来自切主题：新内容从透明淡入，把重建卡顿藏成一次渐变
         ThemeSwitch.fadeInIfPending(this);
@@ -233,6 +261,14 @@ public class NativeHome extends Activity {
         // 后台不再唤醒 CPU：顶栏点不需要实时刷，页面数据等回到前台再说
         uiHandler.removeCallbacks(ticker);
         uiHandler.removeCallbacks(autoRefresh);
+        // 一次性启动任务也撤销：几秒内退到后台就不该再弹框 / 拉 Activity
+        uiHandler.removeCallbacks(launchWhatsNew);
+        uiHandler.removeCallbacks(launchBackgroundGuide);
+        uiHandler.removeCallbacks(launchFreezeNudge);
+        uiHandler.removeCallbacks(launchAutoCheck);
+        uiHandler.removeCallbacks(launchShellCheck);
+        // 停掉网关探测循环：退后台不再每 ~50s 唤醒探测
+        stopPolling();
     }
 
     @Override
@@ -257,6 +293,7 @@ public class NativeHome extends Activity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        stopPolling();
         uiHandler.removeCallbacksAndMessages(null);
         pool.shutdownNow();
     }
@@ -336,6 +373,23 @@ public class NativeHome extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         root.addView(shell);
+
+        // 底部渐隐罩：内容滚到底时从下往上「逐渐清晰」，不再把半截字硬切在
+        // 胶囊栏/导航条下面。放在 shell 之上、底栏之下；不可点、不拦触摸。
+        // 高度取 bottomInset + 约 20dp，让渐隐从更高处开始；底部为不透明的页面
+        // 底色，顶部同色 alpha=0。切主题会 recreate，按新 SURFACE 重新生成即可。
+        View fade = new View(this);
+        int fadeSurface = ui.col(M3.SURFACE);
+        GradientDrawable fadeBg = new GradientDrawable(
+                GradientDrawable.Orientation.BOTTOM_TOP,
+                new int[]{fadeSurface, (fadeSurface & 0x00FFFFFF)});
+        fade.setBackground(fadeBg);
+        fade.setClickable(false);
+        fade.setFocusable(false);
+        FrameLayout.LayoutParams flp = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, bottomInset(ui) + ui.dp(20));
+        flp.gravity = Gravity.BOTTOM;
+        root.addView(fade, flp);
 
         // 底栏是浮在内容上面的胶囊：不占布局高度，页面在它下面继续铺。
         // 宽度铺满（左右各留 16dp），像酷安那样一条横贯的胶囊，而不是中间
@@ -626,14 +680,13 @@ public class NativeHome extends Activity {
             }
         }
         // 上一个页如果挂着常驻轮询，先收掉，别在后台空转；
-        // 当前这个页重新挂上（切回来时要恢复它的定时器）
+        // 当前这页在下面 currentPage() 之后**统一 attach 一次**即可，这里不要再
+        // 给当前页 onAttach（否则会调两次，非幂等页面会重复注册/重复轮询）。
         for (int i = 0; i < pages.length; i++) {
             if (pages[i] == null) {
                 continue;
             }
-            if (i == tab) {
-                pages[i].onAttach();
-            } else {
+            if (i != tab) {
                 pages[i].onDetach();
             }
         }
@@ -674,18 +727,36 @@ public class NativeHome extends Activity {
         }
     }
 
+    /** 主动停掉网关探测循环：递增代际让在飞循环退出，并复位 polling。 */
+    private void stopPolling() {
+        pollGen++;
+        polling = false;
+    }
+
     private void pollGateway() {
         if (polling) {
             return;
         }
         polling = true;
+        final int myGen = ++pollGen;
         bg(() -> {
             String host = Prefs.browserHost(this);
             int port = GatewayService.webPort(this);
             for (int i = 0; i < 200; i++) {
+                // 被 pause/destroy 取消、代际被新一次取代、或线程被中断 → 立即退出，
+                // 不再在后台空转（原先没这些检查，退后台仍每 ~50s 唤醒探测）。
+                if (myGen != pollGen || isDestroyed() || isFinishing()
+                        || Thread.currentThread().isInterrupted()) {
+                    return;
+                }
                 if (GatewayService.portOpen(host, port)) {
                     post(() -> {
+                        if (myGen != pollGen) {
+                            return;   // 已失效：旧代回调不要改状态
+                        }
                         polling = false;
+                        pollFailCount = 0;
+                        pollRetryAt = 0;
                         gatewayReady = true;
                         refreshHeader();
                         // 网关就绪后把壳里的局域网开关推给 magpie（幂等）
@@ -697,8 +768,15 @@ public class NativeHome extends Activity {
                 GatewayService.sleep(250);
             }
             post(() -> {
+                if (myGen != pollGen) {
+                    return;
+                }
                 polling = false;
                 gatewayReady = false;
+                // 失败退避：连续失败越多，下次允许重扫越晚，上限 60s。仅前台续扫。
+                pollFailCount++;
+                long backoff = Math.min(60_000L, 3_000L * pollFailCount);
+                pollRetryAt = System.currentTimeMillis() + backoff;
                 refreshHeader();
                 // 一直没等到端口：页面上给「启动中」而不是「读不到」，
                 // 因为这时候接口本来就还没起来，不是读失败。
@@ -734,7 +812,9 @@ public class NativeHome extends Activity {
                     : state == 1 ? R.string.header_starting
                     : R.string.header_stopped);
         }
-        if (state == 0 && !polling) {
+        // 网关没起：只有前台、且过了失败退避时间才续扫，避免退后台还被每 2s 拉起来。
+        if (state == 0 && !polling && resumed
+                && System.currentTimeMillis() >= pollRetryAt) {
             pollGateway();
         }
 
@@ -1115,10 +1195,16 @@ public class NativeHome extends Activity {
      * 三个按钮：复制密钥 / 关闭 / 复制网关。
      */
     private void showGatewayDialog() {
-        String url = "http://" + Prefs.browserHost(this) + ":"
+        final String url = "http://" + Prefs.browserHost(this) + ":"
                 + GatewayService.gatewayPort(this) + "/v1";
-        final String secret = LanInfo.lanSecret(this);
+        // 读局域网密钥是磁盘 IO：放后台读，回到主线程再弹窗（别在主线程读文件卡顿）。
+        LanInfo.lanSecretAsync(this, secret -> buildGatewayDialog(url, secret));
+    }
 
+    private void buildGatewayDialog(String url, final String secret) {
+        if (isFinishing() || isDestroyed()) {
+            return;
+        }
         StringBuilder sb = new StringBuilder();
         sb.append("网关地址\n  ").append(url);
         if (secret != null && !secret.isEmpty()) {
@@ -1173,9 +1259,17 @@ public class NativeHome extends Activity {
     }
 
     private void showLanDialog() {
+        // 网卡枚举 + 读密钥都是阻塞操作：都放后台，两块都回来后再回主线程拼弹窗。
+        LanInfo.lanSecretAsync(this, secret ->
+                LanInfo.localIpsAsync(ips -> buildLanDialog(ips, secret)));
+    }
+
+    private void buildLanDialog(List<String> ips, final String secret) {
+        if (isFinishing() || isDestroyed()) {
+            return;
+        }
         StringBuilder sb = new StringBuilder();
         sb.append("网关地址\n");
-        List<String> ips = LanInfo.localIps();
         if (ips == null || ips.isEmpty()) {
             sb.append("  没找到局域网地址\n");
         } else {
@@ -1184,7 +1278,6 @@ public class NativeHome extends Activity {
                         .append(GatewayService.gatewayPort(this)).append("/v1\n");
             }
         }
-        final String secret = LanInfo.lanSecret(this);
         if (secret != null && !secret.isEmpty()) {
             sb.append("\n密钥\n  ").append(LanInfo.mask(secret)).append('\n');
         } else {

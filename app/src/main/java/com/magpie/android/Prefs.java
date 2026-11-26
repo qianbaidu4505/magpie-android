@@ -508,7 +508,7 @@ public final class Prefs {
 
     /** The key the Web UI asks for. Generated once and kept, so the WebView
      *  can be pointed at {@code /?k=…} without scraping magpie's stdout. */
-    public static String webKey(Context ctx) {
+    public static synchronized String webKey(Context ctx) {
         String k = sp(ctx).getString(WEBKEY, null);
         if (k == null || k.length() < 8) {
             k = newKey();
@@ -526,7 +526,8 @@ public final class Prefs {
     public static void setPort(Context ctx, String p) {
         try {
             int v = Integer.parseInt(p.trim());
-            if (v > 0 && v < 65536) {
+            // 端口下限 1024：<1024 是特权端口，普通 App 绑定会 EACCES 空转重试。
+            if (v >= 1024 && v < 65536) {
                 sp(ctx).edit().putString(PORT, String.valueOf(v)).apply();
             }
         } catch (Exception ignored) {
